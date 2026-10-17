@@ -1,0 +1,162 @@
+{
+  "room": {
+    "size_xy": [
+      5.0,
+      4.0
+    ],
+    "ceiling_height": 2.6,
+    "wall_thickness": 0.1
+  },
+  "objects": [
+    {
+      "name": "klippan_loveseat_bomstad_black",
+      "label": "sofa",
+      "source": "catalog",
+      "mesh": "meshes/klippan_loveseat_bomstad_black.glb",
+      "pos": [
+        -0.5044010676390522,
+        1.56025,
+        0.0
+      ],
+      "yaw": 0.0,
+      "size": [
+        1.7685,
+        0.8795,
+        0.6604
+      ],
+      "movable": true,
+      "rgba": [
+        0.14260903694255017,
+        0.14442100443179776,
+        0.14679553222456623,
+        1.0
+      ],
+      "product": {
+        "title": "KLIPPAN Loveseat - Bomstad black",
+        "url": "https://www.ikea.com/us/en/p/klippan-loveseat-bomstad-black-50399318/",
+        "price": 449.0,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "eken_set_armchair_kilanda_light_beige",
+      "label": "armchair",
+      "source": "catalog",
+      "mesh": "meshes/eken_set_armchair_kilanda_light_beige.glb",
+      "pos": [
+        -1.7516404089193305,
+        -0.16311005594504546,
+        0.0
+      ],
+      "yaw": 2.356194490192345,
+      "size": [
+        0.6413,
+        0.7811,
+        0.7588
+      ],
+      "movable": true,
+      "rgba": [
+        0.6098571338009094,
+        0.5603547738288026,
+        0.526472989509314,
+        1.0
+      ],
+      "product": {
+        "title": "EKENÄSET Armchair - Kilanda light beige",
+        "url": "https://www.ikea.com/us/en/p/ekenaeset-armchair-kilanda-light-beige-30533493/",
+        "price": 199.0,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "kallax_desk_white",
+      "label": "desk",
+      "source": "catalog",
+      "mesh": "meshes/kallax_desk_white.glb",
+      "pos": [
+        1.6,
+        1.8,
+        0.0
+      ],
+      "yaw": 3.141592653589793,
+      "size": [
+        1.1112,
+        0.39049999999999996,
+        0.7715000000000001
+      ],
+      "movable": true,
+      "rgba": [
+        0.8239192850247563,
+        0.8267372507499559,
+        0.8026282191012986,
+        1.0
+      ],
+      "product": {
+        "title": "KALLAX Desk - white",
+        "url": "https://www.ikea.com/us/en/p/kallax-desk-white-30582445/",
+        "price": 79.99,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "dyvlinge_swivel_chair_kelinge_black",
+      "label": "chair",
+      "source": "catalog",
+      "mesh": "meshes/dyvlinge_swivel_chair_kelinge_black.glb",
+      "pos": [
+        1.4216990493112465,
+        0.8444895345756137,
+        0.0
+      ],
+      "yaw": 3.141592653589793,
+      "size": [
+        0.6286,
+        0.7492999999999999,
+        0.6794
+      ],
+      "movable": true,
+      "rgba": [
+        0.21101154015957993,
+        0.2149081591978707,
+        0.21677820887289256,
+        1.0
+      ],
+      "product": {
+        "title": "DYVLINGE Swivel chair - Kelinge black",
+        "url": "https://www.ikea.com/us/en/p/dyvlinge-swivel-chair-kelinge-black-80570831/",
+        "price": 199.0,
+        "currency": "USD"
+      }
+    },
+    {
+      "name": "ikea_ps_l_msk_swivel_armchair_white_red",
+      "label": "armchair",
+      "source": "catalog",
+      "mesh": "meshes/ikea_ps_l_msk_swivel_armchair_white_red.glb",
+      "pos": [
+        1.402201579830379,
+        -0.6996381163553655,
+        0.0
+      ],
+      "yaw": 0.0,
+      "size": [
+        0.59055,
+        0.6189980000000002,
+        0.7493
+      ],
+      "movable": true,
+      "rgba": [
+        0.8495085735694974,
+        0.8379038134564003,
+        0.8235159969582522,
+        1.0
+      ],
+      "product": {
+        "title": "IKEA PS LÖMSK Swivel armchair - white/red",
+        "url": "https://www.ikea.com/us/en/p/ikea-ps-loemsk-swivel-armchair-white-red-10407136/",
+        "price": 129.99,
+        "currency": "USD"
+      }
+    }
+  ]
+}
