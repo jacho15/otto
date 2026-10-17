@@ -251,3 +251,36 @@ a {
     border-top: 1px solid var(--line);
   }
 }
+
+.scene-toolbar {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  gap: 6px;
+}
+
+.scene-toolbar button {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.scene-toolbar button.on {
+  color: var(--ink);
+  border-color: currentColor;
+}
+
+.dist {
+  pointer-events: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--muted);
+}

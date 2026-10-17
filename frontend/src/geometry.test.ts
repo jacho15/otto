@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { Euler, Vector3 } from 'three'
 import {
   findWarnings,
+  formatDistance,
   footprintCorners,
   footprintsOverlap,
   outsideWalls,
   roomToThree,
   threeToRoom,
+  wallGaps,
   warnedNames,
 } from './geometry'
 import type { RoomObject, Vec3 } from './types'
@@ -115,5 +117,26 @@ describe('findWarnings', () => {
       { type: 'wall', object: 'c' },
     ])
     expect([...warnedNames(w)].sort()).toEqual(['a', 'b', 'c'])
+  })
+})
+
+describe('wallGaps', () => {
+  it('measures each side of an axis-aligned footprint', () => {
+    const g = wallGaps(footprintCorners([1, -0.5], [1, 0.5], 0), [5, 4])
+    expect(g['+x']).toBeCloseTo(1, 9)
+    expect(g['-x']).toBeCloseTo(3, 9)
+    expect(g['+y']).toBeCloseTo(2.25, 9)
+    expect(g['-y']).toBeCloseTo(1.25, 9)
+  })
+
+  it('goes negative past a wall', () => {
+    expect(wallGaps(footprintCorners([2.4, 0], [1, 1], 0), [5, 4])['+x']).toBeCloseTo(-0.4, 9)
+  })
+})
+
+describe('formatDistance', () => {
+  it('uses cm under a metre and m above', () => {
+    expect(formatDistance(0.354)).toBe('35 cm')
+    expect(formatDistance(1.254)).toBe('1.25 m')
   })
 })

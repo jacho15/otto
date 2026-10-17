@@ -80,3 +80,29 @@ export function warnedNames(warnings: Warning[]): Set<string> {
   }
   return names
 }
+
+export interface WallGaps {
+  '+x': number
+  '-x': number
+  '+y': number
+  '-y': number
+}
+
+/** Clear distance from a footprint to each wall; negative means it pokes through. */
+export function wallGaps(corners: Vec2[], sizeXY: Vec2): WallGaps {
+  const xs = corners.map((p) => p[0])
+  const ys = corners.map((p) => p[1])
+  const hx = sizeXY[0] / 2
+  const hy = sizeXY[1] / 2
+  return {
+    '+x': hx - Math.max(...xs),
+    '-x': hx + Math.min(...xs),
+    '+y': hy - Math.max(...ys),
+    '-y': hy + Math.min(...ys),
+  }
+}
+
+/** Metres as "1.25 m", or "35 cm" under a metre. */
+export function formatDistance(m: number): string {
+  return Math.abs(m) >= 1 ? `${m.toFixed(2)} m` : `${Math.round(m * 100)} cm`
+}

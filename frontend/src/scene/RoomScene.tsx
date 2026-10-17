@@ -1,24 +1,40 @@
-import { Suspense, useEffect, useMemo, useRef, type RefObject } from 'react'
-import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
-import { Environment, Lightformer, Line, OrbitControls, useGLTF, useProgress } from '@react-three/drei'
+import { Suspense, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber'
+import {
+  Environment,
+  Html,
+  Lightformer,
+  Line,
+  OrbitControls,
+  OrthographicCamera,
+  PerspectiveCamera,
+  useGLTF,
+  useProgress,
+} from '@react-three/drei'
 import {
   Color,
   Mesh,
   MeshStandardMaterial,
   Plane,
   Raycaster,
+  SRGBColorSpace,
   Vector2,
   Vector3,
+  type BufferGeometry,
   type Material,
   type Ray,
 } from 'three'
+import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
 import { meshUrl } from '../api'
-import { footprintCorners, roomToThree, threeToRoom } from '../geometry'
+import { footprintCorners, formatDistance, roomToThree, threeToRoom, wallGaps } from '../geometry'
 import type { Room, RoomObject, Vec2, Vec3 } from '../types'
 
 const ACCENT = '#2F5D50'
 const WARN = '#C2412D'
 const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0)
+const GRID_STEP = 0.5 // metres
+
+type View = 'persp' | 'top'
 
 interface Props {
   room: Room
@@ -51,6 +67,10 @@ export default function RoomScene(props: Props) {
   const [W, D] = room.room.size_xy
   const span = Math.max(W, D)
   const drag = useRef<Drag | null>(null)
+  const [view, setView] = useState<View>('persp')
+  const [showPoints, setShowPoints] = useState(false)
+  const pointCloud = room.room.point_cloud
+  const selectedObj = objects.find((o) => o.name === selected)
 
   const startDrag = (obj: RoomObject, e: ThreeEvent<PointerEvent>) => {
     const hit = floorHit(e.ray)
@@ -61,11 +81,19 @@ export default function RoomScene(props: Props) {
 
   return (
     <>
-      <Canvas
-        shadows
-        camera={{ position: [span * 0.8, span * 1.0, span * 1.1], fov: 45, near: 0.05, far: 100 }}
-        onPointerMissed={() => onSelect(null)}
-      >
+      <Canvas shadows onPointerMissed={() => onSelect(null)}>
+        {/* The floor plan uses a true orthographic camera so tall furniture never pokes past the walls. */}
+        {view === 'persp' ? (
+          <PerspectiveCamera
+            makeDefault
+            position={[span * 0.8, span * 1.0, span * 1.1]}
+            fov={45}
+            near={0.05}
+            far={100}
+          />
+        ) : (
+          <TopCamera W={W} D={D} />
+        )}
         <color attach="background" args={['#F7F4EF']} />
         <hemisphereLight args={['#ffffff', '#d9cfbf', 0.5]} />
         <directionalLight
@@ -95,6 +123,7 @@ export default function RoomScene(props: Props) {
           <planeGeometry args={[W, D]} />
           <meshStandardMaterial color="#E8DFD0" roughness={0.9} />
         </mesh>
+        <FloorGrid W={W} D={D} />
         <Walls W={W} D={D} H={room.room.ceiling_height} t={room.room.wall_thickness} />
 
         <Suspense fallback={null}>
@@ -118,17 +147,34 @@ export default function RoomScene(props: Props) {
           .map((o) => (
             <Footprint key={o.name} obj={o} color={warned.has(o.name) ? WARN : ACCENT} />
           ))}
+        {selectedObj && <WallMeasure obj={selectedObj} sizeXY={room.room.size_xy} />}
+
+        {pointCloud && showPoints && (
+          <Suspense fallback={null}>
+            <PointCloud url={meshUrl(room.id, pointCloud)} />
+          </Suspense>
+        )}
 
         <DragController drag={drag} onDrag={props.onDrag} onDragEnd={props.onDragEnd} />
         <OrbitControls
+          key={view}
           makeDefault
           enabled={!dragging}
-          target={[0, 0.3, 0]}
+          enableRotate={view === 'persp'}
+          screenSpacePanning
+          target={view === 'persp' ? [0, 0.3, 0] : [0, 0, 0]}
           maxPolarAngle={Math.PI / 2 - 0.05}
           minDistance={1}
           maxDistance={span * 4}
         />
       </Canvas>
+      <div className="scene-toolbar">
+        <button className={view === 'persp' ? 'on' : ''} onClick={() => setView('persp')}>3D view</button>
+        <button className={view === 'top' ? 'on' : ''} onClick={() => setView('top')}>Top view</button>
+        {pointCloud && (
+          <button className={showPoints ? 'on' : ''} onClick={() => setShowPoints((v) => !v)}>Scan points</button>
+        )}
+      </div>
       <LoadingNote />
     </>
   )
@@ -211,15 +257,21 @@ function Piece({
       mesh.castShadow = true
       mesh.receiveShadow = true
       const geom = mesh.geometry
-      if (!geom.attributes.normal) geom.computeVertexNormals()
+      // Meshes written by trimesh carry no normals; without them everything renders black.
+      const flat = !geom.attributes.normal
+      if (flat) geom.computeVertexNormals()
       const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as Material[]
       const textured = mats.some((m) => (m as MeshStandardMaterial).map)
-      if (!textured && !geom.attributes.color) {
+      if (geom.attributes.color) {
+        // Scanned and reconstructed pieces are coloured per vertex.
+        mesh.material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.8, flatShading: flat })
+      } else if (!textured) {
         mesh.material = new MeshStandardMaterial({
-          color: new Color(r, g, b),
+          color: new Color().setRGB(r, g, b, SRGBColorSpace),
           opacity: a,
           transparent: a < 1,
           roughness: 0.8,
+          flatShading: flat,
         })
       }
     })
@@ -250,6 +302,88 @@ function Piece({
 function Footprint({ obj, color }: { obj: RoomObject; color: string }) {
   const points = footprintCorners(obj.pos, obj.size, obj.yaw).map(([x, y]) => roomToThree([x, y, 0.01]))
   return <Line points={[...points, points[0]]} color={color} lineWidth={2.5} />
+}
+
+/** Orthographic camera looking straight down, zoomed so the whole floor fits. */
+function TopCamera({ W, D }: { W: number; D: number }) {
+  const { size } = useThree()
+  const zoom = Math.min(size.width / W, size.height / D) / 1.15
+  return (
+    <OrthographicCamera
+      makeDefault
+      position={[0, 20, 0]}
+      up={[0, 0, -1]} // room +y points up the screen
+      zoom={zoom}
+      near={0.05}
+      far={100}
+      onUpdate={(c) => c.lookAt(0, 0, 0)}
+    />
+  )
+}
+
+/** 50 cm grid clipped to the floor, so sizes can be judged at a glance. */
+function FloorGrid({ W, D }: { W: number; D: number }) {
+  const positions = useMemo(() => {
+    const pts: number[] = []
+    for (let x = -W / 2; x <= W / 2 + 1e-6; x += GRID_STEP) pts.push(x, 0.002, -D / 2, x, 0.002, D / 2)
+    for (let z = -D / 2; z <= D / 2 + 1e-6; z += GRID_STEP) pts.push(-W / 2, 0.002, z, W / 2, 0.002, z)
+    return new Float32Array(pts)
+  }, [W, D])
+  return (
+    <lineSegments raycast={() => null}>
+      <bufferGeometry key={positions.length}>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+      </bufferGeometry>
+      <lineBasicMaterial color="#000000" transparent opacity={0.08} />
+    </lineSegments>
+  )
+}
+
+/** Distance from the selected piece to each wall, drawn on the floor. */
+function WallMeasure({ obj, sizeXY }: { obj: RoomObject; sizeXY: Vec2 }) {
+  const corners = footprintCorners(obj.pos, obj.size, obj.yaw)
+  const gaps = wallGaps(corners, sizeXY)
+  const xs = corners.map((p) => p[0])
+  const ys = corners.map((p) => p[1])
+  const [cx, cy] = obj.pos
+  const hx = sizeXY[0] / 2
+  const hy = sizeXY[1] / 2
+  const segs: [Vec2, Vec2, number][] = [
+    [[Math.max(...xs), cy], [hx, cy], gaps['+x']],
+    [[Math.min(...xs), cy], [-hx, cy], gaps['-x']],
+    [[cx, Math.max(...ys)], [cx, hy], gaps['+y']],
+    [[cx, Math.min(...ys)], [cx, -hy], gaps['-y']],
+  ]
+  return (
+    <>
+      {segs
+        .filter(([, , gap]) => gap >= 0.005)
+        .map(([a, b, gap], i) => (
+          <group key={i}>
+            <Line
+              points={[roomToThree([a[0], a[1], 0.02]), roomToThree([b[0], b[1], 0.02])]}
+              color={ACCENT}
+              lineWidth={1.5}
+              dashed
+              dashSize={0.05}
+              gapSize={0.03}
+            />
+            <Html position={roomToThree([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0.05])} center className="dist">
+              {formatDistance(gap)}
+            </Html>
+          </group>
+        ))}
+    </>
+  )
+}
+
+function PointCloud({ url }: { url: string }) {
+  const geom = useLoader(PLYLoader, url) as BufferGeometry
+  return (
+    <points geometry={geom} rotation-x={-Math.PI / 2} raycast={() => null}>
+      <pointsMaterial size={0.015} vertexColors={!!geom.attributes.color} />
+    </points>
+  )
 }
 
 interface WallSpec {
