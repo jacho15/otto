@@ -1,11 +1,13 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { formatPrice, getCatalog } from '../api'
 import { FIT_TEXT, SORT_TEXT, productFit, sortItems, type Fit, type SortKey } from '../shopLogic'
-import type { CatalogItem, RoomObject, RoomShape } from '../types'
+import type { CatalogItem, Door, RoomObject, RoomShape } from '../types'
+import DoorBadge from './DoorBadge'
 import ShopPhoto from './ShopPhoto'
 
 interface Props {
   room: RoomShape
+  door: Door
   objects: RoomObject[]
   /** The selected piece that Replace would swap out, if any. */
   target: { name: string; title: string } | null
@@ -15,7 +17,7 @@ interface Props {
 
 const cm = (m: number) => Math.round(m * 100)
 
-export default function Shop({ room, objects, target, busy, onAdd }: Props) {
+export default function Shop({ room, door, objects, target, busy, onAdd }: Props) {
   const [items, setItems] = useState<CatalogItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [sort, setSort] = useState<SortKey>('fit')
@@ -77,7 +79,8 @@ export default function Shop({ room, objects, target, busy, onAdd }: Props) {
                 </div>
                 <p className="muted shop-size">
                   {cm(item.size[0])} × {cm(item.size[1])} × {cm(item.size[2])} cm{' '}
-                  <span className={fit === 'fits' ? 'badge-ok' : 'badge-warn'}>{FIT_TEXT[fit]}</span>
+                  <span className={fit === 'fits' ? 'badge-ok' : 'badge-warn'}>{FIT_TEXT[fit]}</span>{' '}
+                  <DoorBadge size={item.size} door={door} />
                 </p>
                 <a className="shop-link" href={item.url} target="_blank" rel="noopener noreferrer">
                   View at IKEA

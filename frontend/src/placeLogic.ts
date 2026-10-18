@@ -6,6 +6,8 @@ export const LIMITS = {
   width: { label: 'Width', min: 1.5, max: 15 },
   depth: { label: 'Depth', min: 1.5, max: 15 },
   height: { label: 'Ceiling height', min: 2, max: 4 },
+  doorWidth: { label: 'Door width', min: 0.5, max: 2 },
+  doorHeight: { label: 'Door height', min: 1.5, max: 3 },
 } as const
 
 export type Dim = keyof typeof LIMITS

@@ -135,6 +135,30 @@ export function footprintGap(a: Vec2[], b: Vec2[]): Gap {
   return best
 }
 
+export const SNAP_DISTANCE = 0.12 // m
+export const WALKWAY = 0.6 // m
+
+/** A gap you can see but not comfortably walk through. */
+export function isTight(gap: number): boolean {
+  return gap > 0 && gap < WALKWAY
+}
+
+/** Shift a footprint centred at pos flush against any wall it is within `dist` of, each axis on its own. */
+export function snapToWalls(pos: Vec2, size: Vec2 | Vec3, yaw: number, sizeXY: Vec2, dist = SNAP_DISTANCE): Vec2 {
+  const c = Math.abs(Math.cos(yaw))
+  const s = Math.abs(Math.sin(yaw))
+  const ext: Vec2 = [(c * size[0] + s * size[1]) / 2, (s * size[0] + c * size[1]) / 2]
+  const out: Vec2 = [pos[0], pos[1]]
+  for (const i of [0, 1]) {
+    const half = sizeXY[i] / 2
+    const gapHigh = half - (pos[i] + ext[i])
+    const gapLow = half + (pos[i] - ext[i])
+    if (Math.abs(gapHigh) > dist && Math.abs(gapLow) > dist) continue
+    out[i] = Math.abs(gapHigh) <= Math.abs(gapLow) ? half - ext[i] : -half + ext[i]
+  }
+  return out
+}
+
 /** Metres as "1.25 m", or "35 cm" under a metre. */
 export function formatDistance(m: number): string {
   return Math.abs(m) >= 1 ? `${m.toFixed(2)} m` : `${Math.round(m * 100)} cm`

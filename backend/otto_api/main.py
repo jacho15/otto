@@ -4,6 +4,7 @@ import re
 import secrets
 import tempfile
 import threading
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Annotated
@@ -40,6 +41,12 @@ def validation_error(request, exc):
 ROOM_ID = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 DEFAULT_DATA = REPO_ROOT / "data"
 lock = threading.Lock()
+HISTORY_LIMIT = 30
+LAYOUT_LIMIT = 10
+PATCH_MERGE_SECONDS = 2
+last_patch: dict[Path, tuple[str, float]] = {}  # per room: object name and time of the newest patch in history
+LAYOUT_ID = re.compile(r"^[0-9a-f]{8}$")
+DEFAULT_DOOR = {"width": 0.81, "height": 2.03}  # a standard 32 x 80 inch door
 
 Number = Annotated[float, Field(allow_inf_nan=False)]
 Money = Annotated[float, Field(allow_inf_nan=False, ge=0)]
@@ -56,6 +63,15 @@ class RoomSize(BaseModel):
     width: Annotated[float, Field(allow_inf_nan=False, ge=1.5, le=15)]
     depth: Annotated[float, Field(allow_inf_nan=False, ge=1.5, le=15)]
     height: Annotated[float, Field(allow_inf_nan=False, ge=2, le=4)]
+
+
+class DoorSize(BaseModel):
+    width: Annotated[float, Field(allow_inf_nan=False, ge=0.5, le=2.0)]
+    height: Annotated[float, Field(allow_inf_nan=False, ge=1.5, le=3.0)]
+
+
+class LayoutName(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
 
 
 class ObjectAdd(BaseModel):
@@ -121,8 +137,37 @@ def load_scene(room_id: str) -> dict:
         return json.load(f)
 
 
-def save_scene(room_id: str, scene: dict) -> None:
+def load_list(path: Path) -> list:
+    if not path.is_file():
+        return []
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def clock() -> float:
+    return time.monotonic()
+
+
+def save_scene(room_id: str, scene: dict, patched: str | None = None) -> None:
+    """Save the scene. The scene it replaces goes into history.json first (newest last).
+    A patch of the same object within PATCH_MERGE_SECONDS of the last one adds no entry,
+    so one undo reverts the whole burst. Call with the lock held."""
     path = room_dir(room_id) / "scene.json"
+    with open(path, encoding="utf-8") as f:
+        old = json.load(f)
+    if old != scene:
+        history_path = path.parent / "history.json"
+        history = load_list(history_path)
+        now = clock()
+        last = last_patch.get(path.parent)
+        if patched and history and last and last[0] == patched and now - last[1] < PATCH_MERGE_SECONDS:
+            last_patch[path.parent] = (patched, now)
+        else:
+            write_json(history_path, (history + [old])[-HISTORY_LIMIT:])
+            if patched:
+                last_patch[path.parent] = (patched, now)
+            else:
+                last_patch.pop(path.parent, None)
     fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -134,18 +179,24 @@ def save_scene(room_id: str, scene: dict) -> None:
         raise
 
 
-def room_response(room_id: str, scene: dict) -> dict:
-    objects = scene["objects"]
+def total_of(objects: list) -> dict:
     products = [o["product"] for o in objects if o.get("product") and not o.get("hidden")]
     prices = [p["price"] for p in products if p.get("price") is not None]
     currency = next((p["currency"] for p in products if p.get("currency")), "USD")
+    return {"amount": round(sum(prices), 2), "currency": currency}
+
+
+def room_response(room_id: str, scene: dict) -> dict:
+    objects = scene["objects"]
     return {
         "id": room_id,
         "name": room_name(room_id, scene["room"].get("kind", "scan")),
         "room": scene["room"],
         "objects": objects,
         "warnings": find_warnings(scene["room"], objects),
-        "total": {"amount": round(sum(prices), 2), "currency": currency},
+        "total": total_of(objects),
+        "door": scene.get("door") or DEFAULT_DOOR,
+        "can_undo": bool(load_list(room_dir(room_id) / "history.json")),
     }
 
 
@@ -237,6 +288,94 @@ def set_room_size(room_id: str, body: RoomSize):
         return room_response(room_id, scene)
 
 
+@app.patch("/api/rooms/{room_id}/door")
+def set_door(room_id: str, body: DoorSize):
+    with lock:
+        scene = load_scene(room_id)
+        scene["door"] = {"width": body.width, "height": body.height}
+        save_scene(room_id, scene)
+        return room_response(room_id, scene)
+
+
+@app.post("/api/rooms/{room_id}/undo")
+def undo(room_id: str):
+    with lock:
+        history_path = room_dir(room_id) / "history.json"
+        history = load_list(history_path)
+        if not history:
+            raise HTTPException(409, "Nothing to undo.")
+        scene = history.pop()
+        last_patch.pop(room_dir(room_id), None)
+        write_json(room_dir(room_id) / "scene.json", scene)
+        write_json(history_path, history)
+        return room_response(room_id, scene)
+
+
+def layouts_summary(layouts: list) -> list:
+    return [
+        {
+            "id": l["id"],
+            "name": l["name"],
+            "saved_at": l["saved_at"],
+            "count": len([o for o in l["objects"] if not o.get("hidden")]),
+            "total": total_of(l["objects"]),
+        }
+        for l in layouts
+    ]
+
+
+def find_layout(layouts: list, layout_id: str) -> dict:
+    if LAYOUT_ID.match(layout_id):
+        for layout in layouts:
+            if layout["id"] == layout_id:
+                return layout
+    raise HTTPException(404, "Layout not found")
+
+
+@app.get("/api/rooms/{room_id}/layouts")
+def list_layouts(room_id: str):
+    with lock:
+        return layouts_summary(load_list(room_dir(room_id) / "layouts.json"))
+
+
+@app.post("/api/rooms/{room_id}/layouts")
+def save_layout(room_id: str, body: LayoutName):
+    with lock:
+        scene = load_scene(room_id)
+        path = room_dir(room_id) / "layouts.json"
+        layouts = load_list(path)
+        if len(layouts) >= LAYOUT_LIMIT:
+            raise HTTPException(409, f"You can keep {LAYOUT_LIMIT} layouts. Delete one first.")
+        layouts.append({
+            "id": secrets.token_hex(4),
+            "name": body.name,
+            "objects": scene["objects"],
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+        })
+        write_json(path, layouts)
+        return layouts_summary(layouts)
+
+
+@app.post("/api/rooms/{room_id}/layouts/{layout_id}/restore")
+def restore_layout(room_id: str, layout_id: str):
+    with lock:
+        scene = load_scene(room_id)
+        layout = find_layout(load_list(room_dir(room_id) / "layouts.json"), layout_id)
+        scene["objects"] = layout["objects"]
+        save_scene(room_id, scene)
+        return room_response(room_id, scene)
+
+
+@app.delete("/api/rooms/{room_id}/layouts/{layout_id}")
+def delete_layout(room_id: str, layout_id: str):
+    with lock:
+        path = room_dir(room_id) / "layouts.json"
+        layouts = load_list(path)
+        layouts.remove(find_layout(layouts, layout_id))
+        write_json(path, layouts)
+        return layouts_summary(layouts)
+
+
 @app.patch("/api/rooms/{room_id}/objects/{name}")
 def patch_object(room_id: str, name: str, body: ObjectPatch):
     with lock:
@@ -250,7 +389,7 @@ def patch_object(room_id: str, name: str, body: ObjectPatch):
             obj["pos"] = [body.pos[0], body.pos[1], 0.0]
         if body.yaw is not None:
             obj["yaw"] = body.yaw
-        save_scene(room_id, scene)
+        save_scene(room_id, scene, patched=name)
         return room_response(room_id, scene)
 
 

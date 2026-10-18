@@ -35,12 +35,27 @@ export interface RoomShape {
   point_cloud?: string // .ply path relative to the room folder, from a scan
 }
 
+export interface Door {
+  width: number // metres
+  height: number
+}
+
 export interface Room {
   id: string
   name: string
   room: RoomShape
   objects: RoomObject[]
   warnings: Warning[]
+  total: { amount: number; currency: string }
+  can_undo: boolean
+  door: Door
+}
+
+export interface Layout {
+  id: string
+  name: string
+  saved_at: string
+  count: number
   total: { amount: number; currency: string }
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { footprintCorners, outsideWalls } from './geometry'
-import { findFreeSpot, productFit, sortItems, type Fit } from './shopLogic'
+import { findFreeSpot, fitsThroughDoor, productFit, sortItems, type Fit } from './shopLogic'
 import type { CatalogItem, RoomObject, RoomShape, Vec3 } from './types'
 
 const room = (w: number, d: number, h = 2.5): RoomShape => ({ size_xy: [w, d], ceiling_height: h, wall_thickness: 0.1 })
@@ -77,4 +77,14 @@ describe('sortItems', () => {
     sortItems(items, fits, 'price-asc')
     expect(ids(items)).toEqual(['sofa', 'desk', 'chair'])
   })
+})
+
+describe('fitsThroughDoor', () => {
+  const door = { width: 0.81, height: 2.03 }
+
+  it('passes a sofa carried on its side', () => expect(fitsThroughDoor([2.2, 0.95, 0.8], door)).toBe(true))
+  it('passes whatever the order of the dimensions', () => expect(fitsThroughDoor([0.8, 2, 0.5], door)).toBe(true))
+  it('fails when the smallest side is wider than the door', () => expect(fitsThroughDoor([2, 1.2, 0.9], door)).toBe(false))
+  it('fails when the middle side is taller than the door', () => expect(fitsThroughDoor([2.5, 2.1, 0.5], door)).toBe(false))
+  it('fits exactly at the limits', () => expect(fitsThroughDoor([3, 2.03, 0.81], door)).toBe(true))
 })

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { deleteObject, patchObject } from './api'
 import { drainQueue, queueChange } from './saveLogic'
 import type { Change } from './saveLogic'
@@ -13,6 +13,7 @@ export type { Change }
  * exclusive runs a job once every queued save is sent, and holds later saves
  * until it finishes, so its response can't overwrite a pending move. The job
  * gets a function that returns the names with changes queued.
+ * working is true while any save or job is queued or running.
  */
 export function useSaveQueue(
   roomId: string,
@@ -22,12 +23,14 @@ export function useSaveQueue(
   const pending = useRef(new Map<string, Change>())
   const jobs = useRef<((pending: () => Set<string>) => Promise<void>)[]>([])
   const busy = useRef(false)
+  const [working, setWorking] = useState(false)
   const callbacks = useRef({ onResult, onFail })
   callbacks.current = { onResult, onFail }
 
   const run = useCallback(async () => {
     if (busy.current) return
     busy.current = true
+    setWorking(true)
     try {
       while (pending.current.size > 0 || jobs.current.length > 0) {
         if (pending.current.size > 0) {
@@ -46,6 +49,7 @@ export function useSaveQueue(
       }
     } finally {
       busy.current = false
+      setWorking(false)
     }
   }, [roomId])
 
@@ -65,5 +69,5 @@ export function useSaveQueue(
     [run],
   )
 
-  return { save, exclusive }
+  return { save, exclusive, working }
 }

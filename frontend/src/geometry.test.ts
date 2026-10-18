@@ -6,8 +6,10 @@ import {
   footprintCorners,
   footprintGap,
   footprintsOverlap,
+  isTight,
   outsideWalls,
   roomToThree,
+  snapToWalls,
   threeToRoom,
   wallGaps,
   warnedNames,
@@ -185,5 +187,43 @@ describe('formatDistance', () => {
   it('uses cm under a metre and m above', () => {
     expect(formatDistance(0.354)).toBe('35 cm')
     expect(formatDistance(1.254)).toBe('1.25 m')
+  })
+})
+
+describe('snapToWalls', () => {
+  const room: [number, number] = [4, 3]
+
+  it('moves a piece flush against a wall within 12 cm', () => {
+    // 1 x 0.5 piece: centre 1.4 puts its right edge at 1.9, 10 cm from the +x wall
+    close(snapToWalls([1.4, 0], [1, 0.5], 0, room), [1.5, 0])
+    close(snapToWalls([-1.45, 0], [1, 0.5], 0, room), [-1.5, 0])
+  })
+
+  it('leaves a piece alone beyond 12 cm', () => {
+    close(snapToWalls([1.3, 0.2], [1, 0.5], 0, room), [1.3, 0.2])
+  })
+
+  it('snaps both axes into a corner', () => {
+    close(snapToWalls([1.45, 1.2], [1, 0.5], 0, room), [1.5, 1.25])
+  })
+
+  it('uses the rotated extent', () => {
+    // turned 90 degrees the piece is 0.5 wide and 1 deep on screen
+    close(snapToWalls([1.7, 0], [1, 0.5], Math.PI / 2, room), [1.75, 0])
+    close(snapToWalls([0, 1.0], [1, 0.5], Math.PI / 2, room), [0, 1])
+    close(snapToWalls([0, 0.95], [1, 0.5], Math.PI / 2, room), [0, 1])
+  })
+
+  it('pulls a piece that pokes a little through the wall back in', () => {
+    close(snapToWalls([1.55, 0], [1, 0.5], 0, room), [1.5, 0])
+  })
+})
+
+describe('isTight', () => {
+  it('is true for a gap over 0 and under 60 cm', () => {
+    expect(isTight(0.48)).toBe(true)
+    expect(isTight(0.599)).toBe(true)
+    expect(isTight(0.6)).toBe(false)
+    expect(isTight(0)).toBe(false)
   })
 })

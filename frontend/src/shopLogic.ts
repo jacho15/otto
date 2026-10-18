@@ -2,7 +2,7 @@
 // Same rules as placing a piece on the server (backend/otto_api/place.py): a spot on a grid,
 // turned 0 or 90 degrees, inside the walls and clear of every visible piece.
 import { footprintCorners, footprintsOverlap, outsideWalls } from './geometry'
-import type { CatalogItem, RoomObject, RoomShape, Vec2, Vec3 } from './types'
+import type { CatalogItem, Door, RoomObject, RoomShape, Vec2, Vec3 } from './types'
 
 const STEP = 0.1 // 10 cm grid: coarser than the server's 5 cm so it stays fast while you drag
 const YAWS = [0, Math.PI / 2]
@@ -39,6 +39,15 @@ export function productFit(size: Vec3, room: RoomShape, objects: RoomObject[]): 
   if (size[2] > room.ceiling_height) return 'too-tall'
   if (!findFreeSpot(size, room, [])) return 'too-big'
   return findFreeSpot(size, room, objects) ? 'fits' : 'no-space'
+}
+
+export const DOOR_TEXT = { yes: 'Fits through the door', no: "Won't fit through the door" }
+export const DOOR_TITLE = 'Estimate: carried on its side'
+
+/** Carried on its side: the smallest dimension passes the door width, the middle one its height. */
+export function fitsThroughDoor(size: Vec3, door: Door): boolean {
+  const [a, b] = [...size].sort((x, y) => x - y)
+  return a <= door.width && b <= door.height
 }
 
 export type SortKey = 'fit' | 'price-asc' | 'price-desc' | 'size' | 'type'

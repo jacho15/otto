@@ -7,13 +7,15 @@ import type { DesignResult, Room } from '../types'
 interface Props {
   roomId: string
   onRoom: (room: Room) => void
+  /** Called with true while the agent is running. */
+  onRunning: (running: boolean) => void
 }
 
 const DEFAULT_INSTRUCTION = 'Lay out my liked pieces in this place, and suggest what else it needs.'
 
 const VERB = { placed: 'Placed', moved: 'Moved', removed: 'Removed' } as const
 
-export default function DesignPanel({ roomId, onRoom }: Props) {
+export default function DesignPanel({ roomId, onRoom, onRunning }: Props) {
   const [likedCount, setLikedCount] = useState<number | null>(null)
   const [instruction, setInstruction] = useState(DEFAULT_INSTRUCTION)
   const [running, setRunning] = useState(false)
@@ -23,6 +25,10 @@ export default function DesignPanel({ roomId, onRoom }: Props) {
   useEffect(() => {
     listSaved().then((s) => setLikedCount(s.length), () => setLikedCount(null))
   }, [])
+
+  useEffect(() => {
+    onRunning(running)
+  }, [running, onRunning])
 
   const design = async () => {
     setRunning(true)

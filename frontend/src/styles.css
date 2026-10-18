@@ -6,6 +6,7 @@
   --line: #e5dfd5;
   --accent: #2f5d50;
   --warn: #c2412d;
+  --caution: #b7791f;
   --radius: 10px;
   font-family: 'DM Sans', system-ui, sans-serif;
   color: var(--ink);
@@ -440,6 +441,11 @@ a {
   color: var(--muted);
 }
 
+.dist.tight {
+  color: var(--caution);
+  border-color: var(--caution);
+}
+
 /* Checkout */
 
 .checkout {
@@ -756,4 +762,67 @@ a {
   margin-left: auto;
   font: inherit;
   cursor: pointer;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.panel-head .btn {
+  padding: 4px 12px;
+}
+
+.door-size {
+  margin-top: 2px;
+}
+
+.layouts-form {
+  display: flex;
+  gap: 6px;
+}
+
+.layouts-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.layout-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.layout-row {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.layout-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.layout-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.layout-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.layout-actions .btn {
+  padding: 4px 12px;
 }

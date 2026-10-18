@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react'
 import { formatPrice, getAlternatives } from '../api'
 import { savingsText } from '../alternativesLogic'
 import { errorText } from '../checkoutLogic'
-import type { AlternativesResult, RoomObject } from '../types'
+import type { AlternativesResult, Door, RoomObject } from '../types'
+import DoorBadge from './DoorBadge'
 import ShopPhoto from './ShopPhoto'
 
 interface Props {
   roomId: string
   piece: RoomObject
+  door: Door
   /** Changes each time a server response is applied; a change can alter what fits. */
   serverVersion: number
   busy: boolean
@@ -16,7 +18,7 @@ interface Props {
 
 type Loaded = { name: string; result?: AlternativesResult; error?: string }
 
-export default function Alternatives({ roomId, piece, serverVersion, busy, onSwap }: Props) {
+export default function Alternatives({ roomId, piece, door, serverVersion, busy, onSwap }: Props) {
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const { name } = piece
 
@@ -59,14 +61,19 @@ export default function Alternatives({ roomId, piece, serverVersion, busy, onSwa
                 <p className="alt-save">{savingsText(a.savings, a.savings_pct, a.currency)}</p>
                 {a.fits ? (
                   <p className="shop-size">
-                    <span className="badge-ok">Fits here</span>
+                    <span className="badge-ok">Fits here</span> <DoorBadge size={a.size} door={door} />
                   </p>
                 ) : (
-                  <ul className="violations shop-size">
-                    {a.problems.map((p, i) => (
-                      <li key={i}>{p}</li>
-                    ))}
-                  </ul>
+                  <>
+                    <ul className="violations shop-size">
+                      {a.problems.map((p, i) => (
+                        <li key={i}>{p}</li>
+                      ))}
+                    </ul>
+                    <p className="shop-size">
+                      <DoorBadge size={a.size} door={door} />
+                    </p>
+                  </>
                 )}
                 <a className="shop-link" href={a.url} target="_blank" rel="noopener noreferrer">
                   View at IKEA

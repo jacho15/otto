@@ -31,8 +31,10 @@ import {
   footprintGap,
   footprintsOverlap,
   formatDistance,
+  isTight,
   outsideWalls,
   roomToThree,
+  snapToWalls,
   threeToRoom,
   wallGaps,
 } from '../geometry'
@@ -41,6 +43,8 @@ import StandIn from './StandIn'
 
 const ACCENT = '#2F5D50'
 const WARN = '#C2412D'
+const CAUTION = '#B7791F'
+const SNAP_KEY = 'otto.snap'
 const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0)
 const GRID_STEP = 0.5 // metres
 const GHOST_OPACITY = 0.15
@@ -68,6 +72,14 @@ interface Drag {
   last: Vec2 | null
 }
 
+function loadSnap(): boolean {
+  try {
+    return localStorage.getItem(SNAP_KEY) !== 'off'
+  } catch {
+    return true
+  }
+}
+
 /** Room-frame (x, y) where a ray hits the floor, or null. */
 function floorHit(ray: Ray): Vec2 | null {
   const p = ray.intersectPlane(FLOOR_PLANE, new Vector3())
@@ -83,6 +95,7 @@ export default function RoomScene(props: Props) {
   const drag = useRef<Drag | null>(null)
   const [view, setView] = useState<View>('persp')
   const [showPoints, setShowPoints] = useState(false)
+  const [snap, setSnap] = useState(loadSnap)
   const pointCloud = room.room.point_cloud
   const selectedObj = objects.find((o) => o.name === selected && !o.hidden)
 
@@ -90,6 +103,23 @@ export default function RoomScene(props: Props) {
   const previewClashes = (o: RoomObject) => {
     const corners = footprintCorners(o.pos, o.size, o.yaw)
     return outsideWalls(corners, room.room.size_xy) || visibleCorners.some((c) => footprintsOverlap(corners, c))
+  }
+
+  // Where a dragged piece lands: flush against a wall when it is close to one.
+  const snapPos = useRef<(name: string, pos: Vec2) => Vec2>((_, pos) => pos)
+  snapPos.current = (name, pos) => {
+    const o = objects.find((x) => x.name === name)
+    return snap && o ? snapToWalls(pos, o.size, o.yaw, room.room.size_xy) : pos
+  }
+
+  const toggleSnap = () => {
+    const next = !snap
+    setSnap(next)
+    try {
+      localStorage.setItem(SNAP_KEY, next ? 'on' : 'off')
+    } catch {
+      // storage unavailable: the choice only lasts this visit
+    }
   }
 
   const startDrag = (obj: RoomObject, e: ThreeEvent<PointerEvent>) => {
@@ -186,7 +216,7 @@ export default function RoomScene(props: Props) {
           </Suspense>
         )}
 
-        <DragController drag={drag} onDrag={props.onDrag} onDragEnd={props.onDragEnd} />
+        <DragController drag={drag} snapPos={snapPos} onDrag={props.onDrag} onDragEnd={props.onDragEnd} />
         <OrbitControls
           key={view}
           makeDefault
@@ -202,6 +232,7 @@ export default function RoomScene(props: Props) {
       <div className="scene-toolbar">
         <button className={view === 'persp' ? 'on' : ''} onClick={() => setView('persp')}>3D view</button>
         <button className={view === 'top' ? 'on' : ''} onClick={() => setView('top')}>Top view</button>
+        <button className={snap ? 'on' : ''} onClick={toggleSnap}>Snap</button>
         {pointCloud && (
           <button className={showPoints ? 'on' : ''} onClick={() => setShowPoints((v) => !v)}>Scan points</button>
         )}
@@ -219,10 +250,12 @@ function LoadingNote() {
 /** Tracks pointer moves on the canvas while a piece is being dragged. */
 function DragController({
   drag,
+  snapPos,
   onDrag,
   onDragEnd,
 }: {
   drag: RefObject<Drag | null>
+  snapPos: RefObject<(name: string, pos: Vec2) => Vec2>
   onDrag: Props['onDrag']
   onDragEnd: Props['onDragEnd']
 }) {
@@ -245,7 +278,7 @@ function DragController({
       raycaster.setFromCamera(ndc, camera)
       const hit = floorHit(raycaster.ray)
       if (!hit) return
-      d.last = [hit[0] + d.offset[0], hit[1] + d.offset[1]]
+      d.last = snapPos.current(d.name, [hit[0] + d.offset[0], hit[1] + d.offset[1]])
       onDrag(d.name, d.last)
     }
     const up = () => {
@@ -263,7 +296,7 @@ function DragController({
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', up)
     }
-  }, [camera, gl, controls, raycaster, drag, onDrag, onDragEnd])
+  }, [camera, gl, controls, raycaster, drag, snapPos, onDrag, onDragEnd])
 
   return null
 }
@@ -432,18 +465,20 @@ function WallMeasure({ obj, sizeXY }: { obj: RoomObject; sizeXY: Vec2 }) {
 
 /** A dashed line on the floor with its length in a label. */
 function DistanceLine({ a, b, gap }: { a: Vec2; b: Vec2; gap: number }) {
+  const tight = isTight(gap)
   return (
     <group>
       <Line
         points={[roomToThree([a[0], a[1], 0.02]), roomToThree([b[0], b[1], 0.02])]}
-        color={ACCENT}
+        color={tight ? CAUTION : ACCENT}
         lineWidth={1.5}
         dashed
         dashSize={0.05}
         gapSize={0.03}
       />
-      <Html position={roomToThree([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0.05])} center className="dist">
+      <Html position={roomToThree([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0.05])} center className={tight ? 'dist tight' : 'dist'}>
         {formatDistance(gap)}
+        {tight && ' · tight'}
       </Html>
     </group>
   )

@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { addObject, formatPrice, getRoom, listOrders } from '../api'
-import { orderedNames } from '../checkoutLogic'
+import { addObject, formatPrice, getRoom, listOrders, restoreLayout, saveLayout, undoRoom } from '../api'
+import { errorText, orderedNames } from '../checkoutLogic'
 import { findWarnings, warnedNames } from '../geometry'
 import RoomScene from '../scene/RoomScene'
 import { mergeServerObjects } from '../saveLogic'
 import { acceptError, previewObject } from '../suggestLogic'
-import type { Order, Room, RoomObject, Suggestion, Vec2 } from '../types'
+import type { Layout, Order, Room, RoomObject, Suggestion, Vec2 } from '../types'
 import { useSaveQueue } from '../useSaveQueue'
 import Alternatives from './Alternatives'
 import Checkout from './Checkout'
 import DesignPanel from './DesignPanel'
+import DoorSize from './DoorSize'
 import { ErrorCard, itemCount } from './Home'
+import Layouts from './Layouts'
 import RoomSize from './RoomSize'
 import Shop from './Shop'
 import Suggestions from './Suggestions'
@@ -30,10 +32,12 @@ export default function RoomPage() {
   const [adding, setAdding] = useState(false)
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [orders, setOrders] = useState<Order[]>([])
+  const [designRunning, setDesignRunning] = useState(false) // the design agent saves on the server outside the save queue
   const [serverVersion, setServerVersion] = useState(0) // bumped whenever a server response is applied
   const draggingRef = useRef<string | null>(null)
   const resyncAfterDrag = useRef(false)
   const addingRef = useRef(false)
+  const undoingRef = useRef(false)
   const replacingRef = useRef<string | null>(null)
   const addEpoch = useRef(0)
   const objectsRef = useRef(objects)
@@ -53,11 +57,17 @@ export default function RoomPage() {
     listOrders(id).then(setOrders, () => {})
   }, [id])
 
+  // Responses to saves and adds leave the room alone except for whether there is something to undo.
+  const syncUndo = useCallback((r: Room) => {
+    setRoom((cur) => (cur && cur.can_undo !== r.can_undo ? { ...cur, can_undo: r.can_undo } : cur))
+  }, [])
+
   const onResult = useCallback((r: Room, pending: Set<string>) => {
     setSaveError(null)
+    syncUndo(r)
     setObjects((local) => mergeServerObjects(local, r.objects, draggingRef.current, pending))
     setServerVersion((v) => v + 1)
-  }, [])
+  }, [syncUndo])
 
   // After a failed save, replace local state with the server's.
   // An add that finishes meanwhile returns the full room, so a reload that started before it is stale.
@@ -77,7 +87,7 @@ export default function RoomPage() {
     )
   }, [id])
 
-  const { save, exclusive } = useSaveQueue(id, onResult, () => {
+  const { save, exclusive, working } = useSaveQueue(id, onResult, () => {
     if (draggingRef.current) resyncAfterDrag.current = true
     else resync()
   })
@@ -92,6 +102,7 @@ export default function RoomPage() {
         try {
           const r = await addObject(id, catalogId, replace)
           setSaveError(null)
+          syncUndo(r)
           setObjects((local) => mergeServerObjects(local, r.objects, draggingRef.current, pending(), r.added))
           setSelected(r.added)
           addEpoch.current++
@@ -105,7 +116,7 @@ export default function RoomPage() {
         }
       })
     },
-    [id, exclusive],
+    [id, exclusive, syncUndo],
   )
 
   // Place a suggestion exactly where it was previewed. Resolves to an error message, or null on success.
@@ -121,6 +132,7 @@ export default function RoomPage() {
           try {
             const r = await addObject(id, s.catalog_id, undefined, { pos: s.pos, yaw: s.yaw })
             setSaveError(null)
+            syncUndo(r)
             setObjects((local) => mergeServerObjects(local, r.objects, draggingRef.current, pending(), r.added))
             setSelected(r.added)
             addEpoch.current++
@@ -132,6 +144,62 @@ export default function RoomPage() {
             addingRef.current = false
             setAdding(false)
             resolve(failure)
+          }
+        })
+      }),
+    [id, exclusive, syncUndo],
+  )
+
+  // Replace the room with a server response that changed more than one piece.
+  const applyRoom = useCallback((r: Room) => {
+    setSaveError(null)
+    setRoom(r)
+    setObjects(r.objects)
+    setSelected((s) => (s && r.objects.some((o) => o.name === s) ? s : null))
+    addEpoch.current++
+    setServerVersion((v) => v + 1)
+  }, [])
+
+  const undo = useCallback(() => {
+    if (undoingRef.current) return
+    undoingRef.current = true
+    exclusive(async () => {
+      try {
+        applyRoom(await undoRoom(id))
+      } catch (e) {
+        setSaveError(errorText(e))
+      } finally {
+        undoingRef.current = false
+      }
+    })
+  }, [id, exclusive, applyRoom])
+
+  // Resolves to an error message, or null on success.
+  const loadLayout = useCallback(
+    (lid: string) =>
+      new Promise<string | null>((resolve) => {
+        exclusive(async () => {
+          let failure: string | null = null
+          try {
+            applyRoom(await restoreLayout(id, lid))
+          } catch (e) {
+            failure = errorText(e)
+          }
+          resolve(failure)
+        })
+      }),
+    [id, exclusive, applyRoom],
+  )
+
+  // Saves the room as it is once any pending drag has landed.
+  const saveLayoutNow = useCallback(
+    (name: string) =>
+      new Promise<Layout[]>((resolve, reject) => {
+        exclusive(async () => {
+          try {
+            resolve(await saveLayout(id, name))
+          } catch (e) {
+            reject(e)
           }
         })
       }),
@@ -173,13 +241,21 @@ export default function RoomPage() {
     [save, resync],
   )
 
+  const canUndo = !!room?.can_undo
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target
-      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return
-      if (t instanceof HTMLButtonElement || (t instanceof HTMLElement && t.isContentEditable)) return
-      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const typing = t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement
+      if (typing || (t instanceof HTMLElement && t.isContentEditable)) return
       if (document.querySelector('[role="dialog"]')) return
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (!draggingRef.current && canUndo && !working && !designRunning) undo()
+        return
+      }
+      if (t instanceof HTMLSelectElement || t instanceof HTMLButtonElement) return
+      if (e.ctrlKey || e.metaKey || e.altKey) return
       if (e.key === 'Escape') return setSelected(null)
       if (tab === 'checkout') return
       const obj = objectsRef.current.find((o) => o.name === selected)
@@ -199,7 +275,7 @@ export default function RoomPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selected, tab, save, updateObject])
+  }, [selected, tab, save, updateObject, canUndo, working, designRunning, undo])
 
   const sizeXY = room?.room.size_xy
   const warned = useMemo(() => (sizeXY ? warnedNames(findWarnings(objects, sizeXY)) : new Set<string>()), [objects, sizeXY])
@@ -245,11 +321,22 @@ export default function RoomPage() {
       <aside className="panel">
         <Link to="/" className="wordmark">otto</Link>
         <div>
-          <h1 className="panel-title">{room.name}</h1>
+          <div className="panel-head">
+            <h1 className="panel-title">{room.name}</h1>
+            <button
+              className="btn"
+              disabled={!room.can_undo || working || designRunning || dragging !== null}
+              title="Undo the last change (Ctrl+Z)"
+              onClick={undo}
+            >
+              Undo
+            </button>
+          </div>
           <RoomSize room={room} itemCount={itemCount(visible.length)} onSaved={(r) => {
             setRoom(r)
             setServerVersion((v) => v + 1)
           }} />
+          <DoorSize room={room} onSaved={setRoom} />
         </div>
         <div className="tabs">
           <button className={tab === 'room' ? 'on' : ''} onClick={() => setTab('room')}>Room</button>
@@ -261,6 +348,7 @@ export default function RoomPage() {
         <div hidden={tab !== 'design'}>
           <DesignPanel
             roomId={id}
+            onRunning={setDesignRunning}
             onRoom={(r) => {
               setRoom(r)
               setObjects(r.objects)
@@ -282,13 +370,14 @@ export default function RoomPage() {
           />
         </div>
         {tab === 'shop' ? (
-          <Shop room={room.room} objects={objects} target={replaceTarget} busy={adding} onAdd={addPiece} />
+          <Shop room={room.room} door={room.door} objects={objects} target={replaceTarget} busy={adding} onAdd={addPiece} />
         ) : tab === 'checkout' || tab === 'design' ? null : (
           <>
           {selectedObj?.movable && selectedObj.product?.price != null && (
             <Alternatives
               roomId={id}
               piece={selectedObj}
+              door={room.door}
               serverVersion={serverVersion}
               busy={adding}
               onSwap={(catalogId) => addPiece(catalogId, selectedObj.name)}
@@ -322,7 +411,8 @@ export default function RoomPage() {
             <span>Total</span>
             <strong>{formatPrice(totalAmount, room.total.currency)}</strong>
           </div>
-          <p className="help">Drag to move · Q / E rotate · Delete removes · Esc deselects</p>
+          <Layouts roomId={id} busy={adding} onSave={saveLayoutNow} onLoad={loadLayout} />
+          <p className="help">Drag to move · Q / E rotate · Delete removes · Ctrl+Z undoes · Esc deselects</p>
           </>
         )}
       </aside>

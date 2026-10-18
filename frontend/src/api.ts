@@ -3,6 +3,7 @@ import type {
   AlternativesResult,
   CatalogItem,
   DesignResult,
+  Layout,
   Mandate,
   MandateInput,
   NewRoomInput,
@@ -103,6 +104,26 @@ export const createRoom = (input: NewRoomInput) => request<Room>('/api/rooms', {
 /** Set a room's measured size in metres; furniture stays where it is. */
 export const setRoomSize = (id: string, size: { width: number; depth: number; height: number }) =>
   request<Room>(`/api/rooms/${encodeURIComponent(id)}`, { method: 'PATCH', ...json(size) })
+
+/** Undo the last change of any kind; the server answers 409 when there is nothing to undo. */
+export const undoRoom = (id: string) => request<Room>(`/api/rooms/${encodeURIComponent(id)}/undo`, { method: 'POST' })
+
+const layoutsUrl = (id: string) => `/api/rooms/${encodeURIComponent(id)}/layouts`
+
+export const listLayouts = (id: string) => request<Layout[]>(layoutsUrl(id))
+
+export const saveLayout = (id: string, name: string) =>
+  request<Layout[]>(layoutsUrl(id), { method: 'POST', ...json({ name }) })
+
+export const restoreLayout = (id: string, lid: string) =>
+  request<Room>(`${layoutsUrl(id)}/${encodeURIComponent(lid)}/restore`, { method: 'POST' })
+
+export const deleteLayout = (id: string, lid: string) =>
+  request<Layout[]>(`${layoutsUrl(id)}/${encodeURIComponent(lid)}`, { method: 'DELETE' })
+
+/** Set the room's doorway in metres. */
+export const setDoor = (id: string, door: { width: number; height: number }) =>
+  request<Room>(`/api/rooms/${encodeURIComponent(id)}/door`, { method: 'PATCH', ...json(door) })
 
 export const listSaved = () => request<SavedItem[]>('/api/saved')
 
