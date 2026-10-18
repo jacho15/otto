@@ -90,6 +90,15 @@ def test_empty_chat_and_history_do_not_count(client, data_dir):
     assert items["prefs"]["count"] == 1
 
 
+def test_history_counts_a_room_with_only_redo_left(client, data_dir):
+    write(data_dir / "rooms" / ROOM / "history.json", [])
+    write(data_dir / "rooms" / ROOM / "redo.json", [scene_of(data_dir)])
+    assert by_kind(client.get(DATA).json())["history"]["count"] == 1
+    body = client.delete(f"{DATA}/history").json()
+    assert by_kind(body)["history"]["count"] == 0
+    assert not (data_dir / "rooms" / ROOM / "redo.json").exists()
+
+
 FILES = {
     "mandate": ["mandate.json"],
     "orders": ["rooms/test-room/orders/a.json", "rooms/test-room/orders/b.json", "rooms/other-room/orders/a.json"],

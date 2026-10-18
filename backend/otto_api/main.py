@@ -218,12 +218,14 @@ def clock() -> float:
 
 def save_scene(room_id: str, scene: dict, patched: str | None = None) -> None:
     """Save the scene. The scene it replaces goes into history.json first (newest last).
+    A real change also empties redo.json.
     A patch of the same object within PATCH_MERGE_SECONDS of the last one adds no entry,
     so one undo reverts the whole burst. Call with the lock held."""
     path = room_dir(room_id) / "scene.json"
     with open(path, encoding="utf-8") as f:
         old = json.load(f)
     if old != scene:
+        (path.parent / "redo.json").unlink(missing_ok=True)
         history_path = path.parent / "history.json"
         history = load_list(history_path)
         now = clock()
@@ -269,6 +271,7 @@ def room_response(room_id: str, scene: dict) -> dict:
         "totals": totals_of(objects),
         "door": scene.get("door") or DEFAULT_DOOR,
         "can_undo": bool(load_list(room_dir(room_id) / "history.json")),
+        "can_redo": bool(load_list(room_dir(room_id) / "redo.json")),
     }
 
 
@@ -377,13 +380,33 @@ def set_door(room_id: str, body: DoorSize):
 def undo(room_id: str):
     with lock:
         history_path = room_dir(room_id) / "history.json"
+        redo_path = room_dir(room_id) / "redo.json"
         history = load_list(history_path)
         if not history:
             raise HTTPException(409, "Nothing to undo.")
         scene = history.pop()
+        redo = load_list(redo_path)
         last_patch.pop(room_dir(room_id), None)
+        write_json(redo_path, (redo + [load_scene(room_id)])[-HISTORY_LIMIT:])
         write_json(room_dir(room_id) / "scene.json", scene)
         write_json(history_path, history)
+        return room_response(room_id, scene)
+
+
+@app.post("/api/rooms/{room_id}/redo")
+def redo(room_id: str):
+    with lock:
+        history_path = room_dir(room_id) / "history.json"
+        redo_path = room_dir(room_id) / "redo.json"
+        redo_list = load_list(redo_path)
+        if not redo_list:
+            raise HTTPException(409, "Nothing to redo.")
+        scene = redo_list.pop()
+        history = load_list(history_path)
+        last_patch.pop(room_dir(room_id), None)
+        write_json(history_path, (history + [load_scene(room_id)])[-HISTORY_LIMIT:])
+        write_json(room_dir(room_id) / "scene.json", scene)
+        write_json(redo_path, redo_list)
         return room_response(room_id, scene)
 
 

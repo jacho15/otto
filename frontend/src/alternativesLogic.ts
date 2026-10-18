@@ -42,11 +42,12 @@ export const shopLinkText = (url: string, shop: string): string =>
   isGoogleUrl(url) ? 'View on Google Shopping' : `View at ${shop}`
 
 /** The custom item to save before an IKEA or shop piece is swapped in. A missing photo or price is left out.
- * A shop price is the listed one, so the item says so. */
+ * A shop price is the listed one, so the item says so. The stand-in grey is left out: the item gets it anyway. */
 export function customItemFor(a: IkeaAlternative | ShopAlternative): NewCustomItem {
   const item: NewCustomItem = { title: a.title, url: a.url, currency: a.currency, size: a.size, label: a.label }
   if (a.price !== null) item.price = a.price
   if (a.image_url) item.image_url = a.image_url
   if (a.source === 'shop') item.price_source = 'listing'
+  if (!(a.rgba[0] === 0.7 && a.rgba[1] === 0.7 && a.rgba[2] === 0.7)) item.rgba = a.rgba
   return item
 }

@@ -104,6 +104,12 @@ describe('customItemFor', () => {
     expect(item).not.toHaveProperty('image_url')
     expect(item).not.toHaveProperty('price_source')
   })
+
+  it('sends a real colour and leaves out the stand-in grey', () => {
+    expect(customItemFor({ ...found, rgba: [0.1, 0.1, 0.1, 1] }).rgba).toEqual([0.1, 0.1, 0.1, 1])
+    expect(customItemFor(found)).not.toHaveProperty('rgba')
+    expect(customItemFor({ ...found, rgba: [0.7, 0.7, 0.7, 0.5] })).not.toHaveProperty('rgba')
+  })
 })
 
 describe('estimatedSizeText', () => {
@@ -175,5 +181,9 @@ describe('customItemFor a shop piece', () => {
 
   it('leaves out a missing photo', () => {
     expect(customItemFor({ ...found, image_url: null })).not.toHaveProperty('image_url')
+  })
+
+  it('sends the colour of the listing', () => {
+    expect(customItemFor({ ...found, rgba: [0.5, 0.5, 0.5, 1] }).rgba).toEqual([0.5, 0.5, 0.5, 1])
   })
 })

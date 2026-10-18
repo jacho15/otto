@@ -30,8 +30,8 @@ def report(*entries):
     return SimpleNamespace(stop_reason="tool_use", content=[block])
 
 
-def entry(index, look, why="Same shell."):
-    return {"index": index, "look": look, "why": why}
+def entry(index, look, why="Same shell.", colour_hex="#1a2b3c"):
+    return {"index": index, "look": look, "why": why, "colour_hex": colour_hex}
 
 
 class FakeClient:
@@ -224,13 +224,28 @@ def test_bad_entries_are_ignored_and_looks_are_clamped(pictures):
         entry(True, 0.5), "text", entry(1, 0.2),
     ))
     scores = looks.score_looks(client, original(), [candidate(i) for i in range(1, 5)], soon())
-    assert scores == [{"look": 1.0, "look_why": "Same shell."}, {"look": 0.0, "look_why": "Same shell."}, None, None]
+    assert scores == [{"look": 1.0, "look_why": "Same shell.", "colour": "#1a2b3c"},
+                      {"look": 0.0, "look_why": "Same shell.", "colour": "#1a2b3c"}, None, None]
 
 
 def test_the_why_is_cut_to_ten_words(pictures):
     long = "one two three four five six seven eight nine ten eleven twelve"
     scores = looks.score_looks(FakeClient(lambda kwargs: report(entry(1, 0.5, long))), original(), [candidate(1)], soon())
     assert scores[0]["look_why"] == "one two three four five six seven eight nine ten"
+
+
+def test_the_colour_is_read_and_a_bad_one_is_ignored_without_losing_the_score(pictures):
+    colours = ["#A1B2C3", "#fff", "red", "#12345g", "", None, 5, "#1a2b3c "]
+    client = FakeClient(lambda kwargs: report(*[entry(i, 0.8, colour_hex=c) for i, c in enumerate(colours[:4], 1)]))
+    scores = looks.score_looks(client, original(), [candidate(i) for i in range(1, 5)], soon())
+    assert [s["colour"] for s in scores] == ["#a1b2c3", None, None, None]
+    assert all(s["look"] == 0.8 for s in scores)
+    client = FakeClient(lambda kwargs: report(*[entry(i, 0.8, colour_hex=c) for i, c in enumerate(colours[4:], 1)]))
+    scores = looks.score_looks(client, original(), [candidate(i) for i in range(1, 5)], soon())
+    assert [s["colour"] for s in scores] == [None] * 4 and all(s["look"] == 0.8 for s in scores)
+    missing = {"index": 1, "look": 0.7, "why": "Same."}  # no colour_hex at all
+    scores = looks.score_looks(FakeClient(lambda kwargs: report(missing)), original(), [candidate(1)], soon())
+    assert scores == [{"look": 0.7, "look_why": "Same.", "colour": None}]
 
 
 def test_no_candidates_makes_no_call(pictures):
@@ -249,6 +264,12 @@ def test_a_candidate_without_a_photo_is_capped_at_point_six(pictures):
     content = client.calls[0]["messages"][0]["content"]
     assert sum(b["type"] == "image" for b in content) == 2  # the original and candidate 1
     assert sum("has no photo" in b.get("text", "") and b["text"].startswith("Candidate") for b in content) == 3
+
+
+def test_a_candidate_without_a_photo_has_no_colour(pictures):
+    client = FakeClient(lambda kwargs: report(entry(1, 0.8, colour_hex="#a1b2c3"), entry(2, 0.8, colour_hex="#a1b2c3")))
+    scores = looks.score_looks(client, original(), [candidate(1), candidate(2, None)], soon())
+    assert [s["colour"] for s in scores] == ["#a1b2c3", None]
 
 
 def test_an_original_without_a_photo_is_described_by_its_title_and_colour(pictures):
@@ -306,6 +327,8 @@ def test_request_shape(pictures):
     tool = body["tools"][0]
     assert tool["name"] == "report_looks" and tool["strict"] is True
     assert tool["input_schema"]["additionalProperties"] is False
+    entry_schema = tool["input_schema"]["properties"]["looks"]["items"]
+    assert "colour_hex" in entry_schema["properties"] and "colour_hex" in entry_schema["required"]
     assert tool["input_schema"]["properties"]["looks"]["items"]["additionalProperties"] is False
     assert "server-side-fallback-2026-07-01" in api.requests[0].headers["anthropic-beta"]
     images = [b for b in body["messages"][0]["content"] if b["type"] == "image"]
@@ -318,7 +341,7 @@ def test_titles_are_data_not_instructions(pictures):
     client = FakeClient(lambda kwargs: report(entry(1, 0.1)))
     candidates = [{"title": evil, "image_url": "https://img.test/c.jpg", "label": "chair"}]
     scores = looks.score_looks(client, {**original(), "title": evil}, candidates, soon())
-    assert scores == [{"look": 0.1, "look_why": "Same shell."}]  # the model's answer is what counts
+    assert scores == [{"look": 0.1, "look_why": "Same shell.", "colour": "#1a2b3c"}]  # the model's answer is what counts
     kwargs = client.calls[0]
     assert "untrusted" in kwargs["system"] and evil not in kwargs["system"]
     texts = [b["text"] for b in kwargs["messages"][0]["content"] if b["type"] == "text"]
@@ -378,6 +401,20 @@ def test_the_look_reason_leads_the_why_within_twelve_words():
     assert out["why"] == "one two three four five six seven eight nine ten."
     (out,) = looks.apply_looks([item("A", why="Close size.")], [scored(0.9, "")])
     assert out["why"] == "Close size."
+
+
+def test_the_colour_of_the_photo_becomes_the_rgba():
+    with_rgba = {**item("A"), "rgba": [0.7, 0.7, 0.7, 1]}
+    out = looks.apply_looks([with_rgba, {**with_rgba, "title": "B"}, {**with_rgba, "title": "C"}],
+                            [{**scored(0.9), "colour": "#ff8000"}, {**scored(0.9), "colour": None}, scored(0.9)])
+    assert out[0]["rgba"] == [1.0, 0.5, 0.0, 1]
+    assert out[1]["rgba"] == [0.7, 0.7, 0.7, 1] and out[2]["rgba"] == [0.7, 0.7, 0.7, 1]  # kept as they were
+    assert with_rgba["rgba"] == [0.7, 0.7, 0.7, 1]
+
+
+def test_the_colour_of_the_photo_replaces_a_title_colour():
+    (out,) = looks.apply_looks([{**item("A"), "rgba": [0.1, 0.1, 0.1, 1]}], [{**scored(0.9), "colour": "#1a2b3c"}])
+    assert out["rgba"] == [0.1, 0.17, 0.24, 1]
 
 
 def test_the_input_items_are_not_changed():

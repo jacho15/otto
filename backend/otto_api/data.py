@@ -88,7 +88,7 @@ def summary() -> dict:
     chats = [len(read(p, {}).get("messages", [])) for p in kind_files("chats")]
     chats = [n for n in chats if n]
     prefs = sum(len(read(p, {}).get("prefs", [])) for p in kind_files("prefs"))
-    history = [p for p in kind_files("history") if read(p, [])]
+    history = [p for p in kind_files("history") if read(p, []) or read(p.with_name("redo.json"), [])]
     layouts = sum(len(read(p, [])) for p in kind_files("layouts"))
     saved = len(read(main.data_dir() / "saved.json", []))
     custom = len(read(main.custom_dir() / "items.json", []))
@@ -127,4 +127,6 @@ def delete_data(kind: str):
                 clear_chat(path, "messages" if kind == "chats" else "prefs")
             else:
                 path.unlink(missing_ok=True)
+                if kind == "history":
+                    path.with_name("redo.json").unlink(missing_ok=True)
         return summary()

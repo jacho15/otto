@@ -8,6 +8,7 @@ from test_agent import FakeApi, text
 
 ROOM_URL = f"/api/rooms/{ROOM}"
 UNDO = f"{ROOM_URL}/undo"
+REDO = f"{ROOM_URL}/redo"
 LAYOUTS = f"{ROOM_URL}/layouts"
 DOOR = f"{ROOM_URL}/door"
 SOFA = f"{ROOM_URL}/objects/sofa"
@@ -24,6 +25,11 @@ def names(room):
     return {o["name"] for o in room["objects"]}
 
 
+def after_undo(client):
+    """The room after an undo, without can_redo, so it compares with an earlier GET."""
+    return {**client.post(UNDO).json(), "can_redo": False}
+
+
 def history(data_dir):
     path = data_dir / "rooms" / ROOM / "history.json"
     return json.loads(path.read_text("utf-8")) if path.is_file() else []
@@ -36,14 +42,14 @@ def test_undo_move(client):
     assert moved["can_undo"] is True
     r = client.post(UNDO)
     assert r.status_code == 200
-    assert r.json() == before
-    assert client.get(ROOM_URL).json() == before
+    assert r.json() == {**before, "can_redo": True}
+    assert client.get(ROOM_URL).json() == {**before, "can_redo": True}
 
 
 def test_undo_delete(client):
     before = client.get(ROOM_URL).json()
     client.delete(f"{ROOM_URL}/objects/chair")
-    assert client.post(UNDO).json() == before
+    assert after_undo(client) == before
 
 
 def test_undo_add(client):
@@ -51,14 +57,14 @@ def test_undo_add(client):
     added = client.post(f"{ROOM_URL}/objects", json={"catalog_id": "small-chair", "pos": [1.0, -1.0]})
     assert added.status_code == 200
     assert len(added.json()["objects"]) == 4
-    assert client.post(UNDO).json() == before
+    assert after_undo(client) == before
 
 
 def test_undo_room_resize(client):
     before = client.get(ROOM_URL).json()
     client.patch(ROOM_URL, json={"width": 6, "depth": 5, "height": 3})
     assert client.get(ROOM_URL).json()["room"]["size_xy"] == [6, 5]
-    assert client.post(UNDO).json() == before
+    assert after_undo(client) == before
 
 
 def test_undo_design_agent_place(client, monkeypatch):
@@ -75,15 +81,15 @@ def test_undo_design_agent_place(client, monkeypatch):
     r = client.post(f"{ROOM_URL}/agent/design", json={"instruction": "go"})
     assert r.status_code == 200 and len(r.json()["changes"]) == 2
     assert client.post(UNDO).json()["objects"] != before["objects"]  # undoes the move only
-    assert client.post(UNDO).json() == before  # then the place
+    assert after_undo(client) == before  # then the place
 
 
 def test_undo_twice_goes_back_in_steps(client):
     original = client.get(ROOM_URL).json()
     first = client.patch(SOFA, json={"pos": [1.0, 1.0]}).json()
     client.patch(SOFA, json={"pos": [-1.0, 1.0]})
-    assert client.post(UNDO).json() == first
-    assert client.post(UNDO).json() == original
+    assert after_undo(client) == first
+    assert after_undo(client) == original
 
 
 def test_quick_patches_of_one_object_undo_together(client, monkeypatch):
@@ -93,7 +99,7 @@ def test_quick_patches_of_one_object_undo_together(client, monkeypatch):
     for n in range(1, 5):
         client.patch(SOFA, json={"yaw": 0.3 * n})
         now[0] += 1.5  # each is within 2 seconds of the one before
-    assert client.post(UNDO).json() == original
+    assert after_undo(client) == original
     assert client.post(UNDO).status_code == 409
 
 
@@ -104,8 +110,8 @@ def test_patches_further_apart_than_2_seconds_stay_separate(client, monkeypatch)
     first = client.patch(SOFA, json={"yaw": 0.3}).json()
     now[0] += 2.5
     client.patch(SOFA, json={"yaw": 0.6})
-    assert client.post(UNDO).json() == first
-    assert client.post(UNDO).json() == original
+    assert after_undo(client) == first
+    assert after_undo(client) == original
 
 
 def test_patch_of_another_object_has_its_own_entry(client, monkeypatch):
@@ -114,8 +120,8 @@ def test_patch_of_another_object_has_its_own_entry(client, monkeypatch):
     client.patch(SOFA, json={"yaw": 0.3})
     after_sofa = client.patch(SOFA, json={"yaw": 0.6}).json()
     client.patch(f"{ROOM_URL}/objects/chair", json={"yaw": 0.3})
-    assert client.post(UNDO).json() == after_sofa  # the chair on its own
-    assert client.post(UNDO).json() == original  # the sofa turns together
+    assert after_undo(client) == after_sofa  # the chair on its own
+    assert after_undo(client) == original  # the sofa turns together
 
 
 def test_other_change_ends_a_burst(client, monkeypatch):
@@ -135,7 +141,7 @@ def test_undo_replace_restores_the_original(client):
     body = r.json()
     assert next(o for o in body["objects"] if o["name"] == "chair")["hidden"] is True
     assert body["added"] in names(body)
-    undone = client.post(UNDO).json()
+    undone = after_undo(client)
     assert undone == before
     assert "hidden" not in next(o for o in undone["objects"] if o["name"] == "chair")
     assert body["added"] not in names(undone)
@@ -148,6 +154,102 @@ def test_undo_with_nothing_is_409(client):
     client.post(UNDO)
     assert client.post(UNDO).status_code == 409
     assert client.post("/api/rooms/nope/undo").status_code == 404
+
+
+def test_redo_restores_what_undo_took_back(client):
+    original = client.get(ROOM_URL).json()
+    assert original["can_redo"] is False
+    moved = client.patch(SOFA, json={"pos": [1.0, 1.0]}).json()
+    assert moved["can_redo"] is False
+    undone = client.post(UNDO).json()
+    assert undone["can_redo"] is True and undone["can_undo"] is False
+    redone = client.post(REDO)
+    assert redone.status_code == 200
+    assert redone.json() == {**moved, "can_redo": False}
+    assert redone.json()["can_undo"] is True
+    assert client.get(ROOM_URL).json() == redone.json()
+    assert client.post(UNDO).json()["objects"] == original["objects"]  # and undo still works
+
+
+def test_undo_and_redo_twice_step_through(client):
+    original = client.get(ROOM_URL).json()
+    first = client.patch(SOFA, json={"pos": [1.0, 1.0]}).json()
+    second = client.patch(SOFA, json={"pos": [-1.0, 1.0]}).json()
+    client.post(UNDO)
+    client.post(UNDO)
+    r = client.post(REDO).json()
+    assert r["objects"] == first["objects"] and r["can_redo"] is True
+    r = client.post(REDO).json()
+    assert r["objects"] == second["objects"] and r["can_redo"] is False
+    assert original["objects"] != second["objects"]
+
+
+def test_redo_with_nothing_is_409(client):
+    r = client.post(REDO)
+    assert r.status_code == 409 and r.json()["detail"] == "Nothing to redo."
+    client.patch(SOFA, json={"pos": [1.0, 1.0]})
+    client.post(UNDO)
+    client.post(REDO)
+    assert client.post(REDO).status_code == 409
+    assert client.post("/api/rooms/nope/redo").status_code == 404
+
+
+def test_new_change_after_undo_clears_redo(client):
+    client.patch(SOFA, json={"pos": [1.0, 1.0]})
+    assert client.post(UNDO).json()["can_redo"] is True
+    changed = client.patch(f"{ROOM_URL}/objects/chair", json={"yaw": 0.3}).json()
+    assert changed["can_redo"] is False
+    assert client.get(ROOM_URL).json()["can_redo"] is False
+    assert client.post(REDO).status_code == 409
+
+
+def test_unchanged_save_after_undo_keeps_redo(client):
+    client.patch(SOFA, json={"pos": [1.0, 1.0]})
+    client.post(UNDO)
+    client.patch(SOFA, json={"yaw": 0.0})
+    assert client.get(ROOM_URL).json()["can_redo"] is True
+
+
+def test_redo_ends_a_patch_burst(client, monkeypatch):
+    now = [100.0]
+    monkeypatch.setattr(main, "clock", lambda: now[0])
+    original = client.get(ROOM_URL).json()
+    client.patch(SOFA, json={"yaw": 0.3})
+    client.post(UNDO)
+    client.post(REDO)
+    now[0] += 0.5  # still within 2 seconds of the first patch
+    client.patch(SOFA, json={"yaw": 0.6})
+    assert client.post(UNDO).json()["objects"] != original["objects"]  # the second patch has its own entry
+    assert client.post(UNDO).json()["objects"] == original["objects"]
+
+
+def test_redo_is_capped_at_30(client, data_dir):
+    for n in range(1, 31):
+        client.patch(SOFA, json={"pos": [0.01 * n, 1.0]})
+    for _ in range(30):
+        client.post(UNDO)
+    redo_path = data_dir / "rooms" / ROOM / "redo.json"
+    assert len(json.loads(redo_path.read_text("utf-8"))) == 30
+    for _ in range(30):
+        assert client.post(REDO).status_code == 200
+    assert client.post(REDO).status_code == 409
+
+
+def test_layout_restore_clears_redo(client):
+    client.patch(SOFA, json={"pos": [1.0, 1.0]})
+    lid = client.post(LAYOUTS, json={"name": "A"}).json()[0]["id"]
+    client.post(UNDO)
+    assert client.get(ROOM_URL).json()["can_redo"] is True
+    assert client.post(f"{LAYOUTS}/{lid}/restore").json()["can_redo"] is False
+
+
+def test_deleting_undo_history_deletes_redo(client, data_dir):
+    client.patch(SOFA, json={"pos": [1.0, 1.0]})
+    client.post(UNDO)
+    redo_path = data_dir / "rooms" / ROOM / "redo.json"
+    assert redo_path.is_file()
+    assert client.delete("/api/data/history").status_code == 200
+    assert not redo_path.exists() and client.get(ROOM_URL).json()["can_redo"] is False
 
 
 def test_unchanged_save_adds_no_history(client, data_dir):
@@ -207,7 +309,7 @@ def test_layout_restore_is_undoable(client):
     assert next(o for o in body["objects"] if o["name"] == "sofa")["pos"] == [0.0, 1.0, 0.0]
     assert body["can_undo"] is True
     assert client.get(ROOM_URL).json() == body
-    assert client.post(UNDO).json() == original
+    assert after_undo(client) == original
 
 
 def test_layout_delete_and_limit(client):

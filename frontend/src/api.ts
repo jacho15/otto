@@ -117,6 +117,9 @@ export const setRoomSize = (id: string, size: { width: number; depth: number; he
 /** Undo the last change of any kind; the server answers 409 when there is nothing to undo. */
 export const undoRoom = (id: string) => request<Room>(`/api/rooms/${encodeURIComponent(id)}/undo`, { method: 'POST' })
 
+/** Redo the last undone change; the server answers 409 when there is nothing to redo. */
+export const redoRoom = (id: string) => request<Room>(`/api/rooms/${encodeURIComponent(id)}/redo`, { method: 'POST' })
+
 const layoutsUrl = (id: string) => `/api/rooms/${encodeURIComponent(id)}/layouts`
 
 export const listLayouts = (id: string) => request<Layout[]>(layoutsUrl(id))

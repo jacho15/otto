@@ -67,6 +67,7 @@ PAGES = {
     "/us/en/p/euro": page("EURO chair", 20, (60, 60, 80), currency="EUR"),
     "/us/en/p/noprice": page("NOPRICE chair", "", (60, 60, 80)),
     "/us/en/p/mine": page("MINE chair", 10, (60, 60, 80)),
+    "/us/en/p/dark": page("DARK chair - Bomstad black", 35, (60, 60, 80)),
 }
 
 
@@ -501,3 +502,33 @@ def test_the_original_photo_comes_from_its_catalog_item(ikea_api, data_dir, fake
     ikea_api(one_turn("good"))
     original = fake_looks.calls[0].original
     assert original["image"] == (jpeg, "image/jpeg") and original["colour"] == "#1a1a1a"
+
+
+def test_items_get_the_colour_in_their_title_else_the_stand_in(ikea_api):
+    r = ikea_api(one_turn("good", "dark"))
+    colours = {a["title"]: a["rgba"] for a in r.json()["alternatives"]}
+    assert colours == {"GOOD chair": ikea.RGBA, "DARK chair - Bomstad black": ikea.TITLE_COLOURS["black"]}
+
+
+@pytest.mark.parametrize("title, word", [
+    ("KLIPPAN Loveseat - Bomstad black", "black"),
+    ("Ashton BLACK Loveseat", "black"),
+    ("Gray and white sofa", "gray"),
+    ("Grey sofa", "grey"),
+    ("Navy blue chair", "navy"),
+    ("Oak table", "oak"),
+])
+def test_title_colour_is_the_first_colour_word(title, word):
+    assert ikea.title_colour(title) == ikea.TITLE_COLOURS[word]
+
+
+@pytest.mark.parametrize("title", ["GOOD chair", "", None, 7, "Blackwood chair", "Tangle table", "Redwood desk", "Grayson sofa"])
+def test_title_colour_needs_a_whole_word(title):
+    assert ikea.title_colour(title) is None
+
+
+def test_title_colours_are_valid_and_not_the_stand_in():
+    for name, rgba in ikea.TITLE_COLOURS.items():
+        assert len(rgba) == 4 and all(0 <= v <= 1 for v in rgba) and rgba[3] == 1, name
+        assert rgba[:3] != ikea.RGBA[:3], name
+    assert ikea.title_colour("Grey sofa") is not ikea.TITLE_COLOURS["grey"]  # a copy, so callers can't change the table

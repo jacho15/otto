@@ -27,6 +27,16 @@ MAX_WORDS = 12
 MAX_URL = 2000
 SIZE_LIMITS = ((0.05, 6), (0.05, 6), (0.05, 3.5))  # width, depth, height in metres, as for custom items
 RGBA = [0.7, 0.7, 0.7, 1]
+TITLE_COLOURS = {
+    "black": [0.1, 0.1, 0.1, 1], "white": [0.95, 0.95, 0.95, 1], "gray": [0.5, 0.5, 0.5, 1], "grey": [0.5, 0.5, 0.5, 1],
+    "charcoal": [0.25, 0.25, 0.27, 1], "beige": [0.85, 0.8, 0.68, 1], "cream": [0.95, 0.92, 0.8, 1],
+    "ivory": [0.96, 0.95, 0.88, 1], "brown": [0.4, 0.26, 0.15, 1], "tan": [0.8, 0.65, 0.45, 1],
+    "walnut": [0.36, 0.25, 0.17, 1], "oak": [0.75, 0.6, 0.4, 1], "natural": [0.8, 0.68, 0.5, 1],
+    "blue": [0.2, 0.35, 0.7, 1], "navy": [0.1, 0.15, 0.35, 1], "green": [0.25, 0.5, 0.3, 1],
+    "olive": [0.45, 0.47, 0.22, 1], "red": [0.75, 0.15, 0.15, 1], "pink": [0.9, 0.6, 0.7, 1],
+    "yellow": [0.95, 0.8, 0.2, 1], "orange": [0.9, 0.5, 0.15, 1], "purple": [0.5, 0.3, 0.6, 1],
+}
+TITLE_COLOUR = re.compile(r"\b(" + "|".join(TITLE_COLOURS) + r")\b", re.I)
 
 SYSTEM = """You find furniture on IKEA's US site for Otto, a room design app.
 Search ikea.com/us/en for products of the same type as the piece you are given, with a similar size. When a price is given, the goal is a cheaper alternative: search broadly for that type (for example "IKEA loveseat", "IKEA two-seat sofa", "IKEA small sofa"), include IKEA's lower-priced product lines, and return a varied list rather than only the same colour or product line. Colour and style only break ties. Prices are checked on the product pages afterwards.
@@ -98,6 +108,12 @@ def look_colour(rgba) -> str | None:
     """The colour of a piece for the look check. None for the stand-in colour of IKEA, shop and custom items."""
     placeholder = isinstance(rgba, (list, tuple)) and list(rgba[:3]) == RGBA[:3]
     return None if placeholder else colour_of(rgba)
+
+
+def title_colour(title) -> list | None:
+    """The rgba of the first colour word in a title ("Bomstad black"), or None when it has none."""
+    found = TITLE_COLOUR.search(title) if isinstance(title, str) else None
+    return list(TITLE_COLOURS[found.group(1).lower()]) if found else None
 
 
 def prompt_for(label, title, size, price, currency, rgba) -> str:
@@ -318,7 +334,7 @@ def shortlist(products: list[dict], wanted: dict) -> list[dict]:
             "price": price,
             "currency": page["currency"] or wanted["currency"],
             "size": size,
-            "rgba": RGBA,
+            "rgba": title_colour(page["title"]) or RGBA,
             "model": None,
             "photo": None,
             "source": "ikea",

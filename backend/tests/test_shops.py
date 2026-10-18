@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from conftest import ROOM
-from otto_api import looks, main, shops
+from otto_api import ikea, looks, main, shops
 from otto_api.agent import AgentError
 from test_agent import FakeApi, text
 from test_custom import ITEM, ITEMS, objects
@@ -634,3 +634,14 @@ def test_the_look_step_stays_inside_the_route_deadline(monkeypatch, fake_looks):
     wanted = {"label": "chair", "size": [0.6, 0.6, 0.8], "price": None, "currency": "USD", "rgba": None, "obj": {}}
     shops.find_items(object(), SECRET, wanted)
     assert fake_looks.calls[0].deadline == 1000 + 45  # 10 s left, less than the 15 s of the look step
+
+
+def test_shop_items_get_the_colour_in_their_title_else_the_stand_in():
+    listings = [
+        {"title": "Ashton Black Loveseat", "shop": "S", "url": "https://s.test/a", "image_url": None, "price": 40, "text": ""},
+        {"title": "Plain loveseat", "shop": "S", "url": "https://s.test/b", "image_url": None, "price": 40, "text": ""},
+    ]
+    wanted = {"label": "loveseat", "size": [1.5, 0.85, 0.85], "price": 50, "currency": "USD", "rgba": None}
+    estimates = {i: {"label": "loveseat", "size": [1.5, 0.85, 0.85], "why": ""} for i in range(2)}
+    black, plain = shops.shortlist(listings, estimates, wanted)
+    assert black["rgba"] == ikea.TITLE_COLOURS["black"] and plain["rgba"] == ikea.RGBA

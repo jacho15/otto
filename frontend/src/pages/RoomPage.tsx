@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { addObject, formatPrice, getRoom, listCustomItems, listOrders, restoreLayout, saveLayout, sendChat, undoRoom } from '../api'
+import { addObject, formatPrice, getRoom, listCustomItems, listOrders, redoRoom, restoreLayout, saveLayout, sendChat, undoRoom } from '../api'
 import { errorText, orderedNames } from '../checkoutLogic'
 import { dropIntent, type DropIntent } from '../furnitureLogic'
 import { findWarnings, warnedNames } from '../geometry'
@@ -91,9 +91,13 @@ export default function RoomPage() {
     listCustomItems().then(setCustomItems, () => {})
   }, [])
 
-  // Responses to saves and adds leave the room alone except for whether there is something to undo.
+  // Responses to saves and adds leave the room alone except for whether there is something to undo or redo.
   const syncUndo = useCallback((r: Room) => {
-    setRoom((cur) => (cur && cur.can_undo !== r.can_undo ? { ...cur, can_undo: r.can_undo } : cur))
+    setRoom((cur) =>
+      cur && (cur.can_undo !== r.can_undo || cur.can_redo !== r.can_redo)
+        ? { ...cur, can_undo: r.can_undo, can_redo: r.can_redo }
+        : cur,
+    )
   }, [])
 
   const onResult = useCallback((r: Room, pending: Set<string>) => {
@@ -200,6 +204,20 @@ export default function RoomPage() {
     exclusive(async () => {
       try {
         applyRoom(await undoRoom(id))
+      } catch (e) {
+        setSaveError(errorText(e))
+      } finally {
+        undoingRef.current = false
+      }
+    })
+  }, [id, exclusive, applyRoom])
+
+  const redo = useCallback(() => {
+    if (undoingRef.current) return
+    undoingRef.current = true
+    exclusive(async () => {
+      try {
+        applyRoom(await redoRoom(id))
       } catch (e) {
         setSaveError(errorText(e))
       } finally {
@@ -326,6 +344,7 @@ export default function RoomPage() {
   }
 
   const canUndo = !!room?.can_undo
+  const canRedo = !!room?.can_redo
   const agentRunning = designRunning || chatRunning
 
   useEffect(() => {
@@ -337,6 +356,12 @@ export default function RoomPage() {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         if (!draggingRef.current && canUndo && !working && !agentRunning) undo()
+        return
+      }
+      const key0 = e.key.toLowerCase()
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && ((key0 === 'z' && e.shiftKey) || (key0 === 'y' && !e.shiftKey))) {
+        e.preventDefault()
+        if (!draggingRef.current && canRedo && !working && !agentRunning) redo()
         return
       }
       if (t instanceof HTMLSelectElement || t instanceof HTMLButtonElement) return
@@ -360,7 +385,7 @@ export default function RoomPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selected, tab, save, updateObject, canUndo, working, agentRunning, undo])
+  }, [selected, tab, save, updateObject, canUndo, canRedo, working, agentRunning, undo, redo])
 
   const sizeXY = room?.room.size_xy
   const warned = useMemo(() => (sizeXY ? warnedNames(findWarnings(objects, sizeXY)) : new Set<string>()), [objects, sizeXY])
@@ -437,6 +462,14 @@ export default function RoomPage() {
               onClick={undo}
             >
               Undo
+            </button>
+            <button
+              className="btn"
+              disabled={!room.can_redo || working || agentRunning || dragging !== null}
+              title="Redo the last undone change (Ctrl+Shift+Z)"
+              onClick={redo}
+            >
+              Redo
             </button>
           </div>
           <RoomSize room={room} itemCount={itemCount(visible.length)} onSaved={(r) => {

@@ -62,6 +62,7 @@ export interface Room {
   total: Total
   totals: Money[]
   can_undo: boolean
+  can_redo: boolean
   door: Door
 }
 
@@ -276,6 +277,7 @@ export interface NewCustomItem {
   model?: string
   image_url?: string
   price_source?: 'page' | 'listing'
+  rgba?: [number, number, number, number]
 }
 
 export interface DataItem {

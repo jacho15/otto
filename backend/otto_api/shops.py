@@ -338,7 +338,7 @@ def shortlist(listings: list[dict], estimates: dict[int, dict], wanted: dict) ->
             "price": price,
             "currency": "USD",
             "size": size,
-            "rgba": ikea.RGBA,
+            "rgba": ikea.title_colour(listing["title"]) or ikea.RGBA,
             "model": None,
             "photo": None,
             "source": "shop",
