@@ -1,0 +1,161 @@
+{
+  "video": {
+    "seconds": 39.7,
+    "frames": 1192,
+    "fps": 30
+  },
+  "stage_frames": [
+    {
+      "frame": 84,
+      "time": 2.8,
+      "objects": 12,
+      "labels": [
+        "chair",
+        "lamp",
+        "rug",
+        "sofa",
+        "table"
+      ]
+    },
+    {
+      "frame": 196,
+      "time": 6.5,
+      "objects": 7,
+      "labels": [
+        "chair",
+        "lamp",
+        "rug",
+        "table"
+      ]
+    },
+    {
+      "frame": 464,
+      "time": 15.5,
+      "objects": 2,
+      "labels": [
+        "armchair",
+        "rug"
+      ]
+    },
+    {
+      "frame": 1136,
+      "time": 37.9,
+      "objects": 1,
+      "labels": [
+        "sofa"
+      ]
+    }
+  ],
+  "candidates": 34,
+  "fitted": 12,
+  "kept": 7,
+  "pieces": [
+    {
+      "name": "chair_2",
+      "label": "chair",
+      "frame": 116,
+      "size": [
+        1.01,
+        0.77,
+        0.81
+      ],
+      "fit": "sam3d_layout",
+      "rmse_cm": 3.9,
+      "color": "#2F5D50"
+    },
+    {
+      "name": "chair_3",
+      "label": "chair",
+      "frame": 116,
+      "size": [
+        0.93,
+        0.92,
+        0.81
+      ],
+      "fit": "yaw_grid",
+      "rmse_cm": 5.8,
+      "color": "#C2412D"
+    },
+    {
+      "name": "sofa_8",
+      "label": "sofa",
+      "frame": 1148,
+      "size": [
+        1.76,
+        1.0,
+        0.93
+      ],
+      "fit": "yaw_grid",
+      "rmse_cm": 6.2,
+      "color": "#3B6EA8"
+    },
+    {
+      "name": "lamp_20",
+      "label": "lamp",
+      "frame": 204,
+      "size": [
+        0.33,
+        0.3,
+        0.76
+      ],
+      "fit": "yaw_grid",
+      "rmse_cm": 6.2,
+      "color": "#B7892E"
+    },
+    {
+      "name": "coffee_table_24",
+      "label": "coffee table",
+      "frame": 384,
+      "size": [
+        0.93,
+        0.94,
+        0.23
+      ],
+      "fit": "yaw_grid",
+      "rmse_cm": 4.1,
+      "color": "#7A4E9C"
+    },
+    {
+      "name": "table_27",
+      "label": "table",
+      "frame": 228,
+      "size": [
+        0.57,
+        0.18,
+        0.52
+      ],
+      "fit": "sam3d_layout",
+      "rmse_cm": 5.8,
+      "color": "#2E8C8C"
+    },
+    {
+      "name": "armchair_31",
+      "label": "armchair",
+      "frame": 488,
+      "size": [
+        0.94,
+        0.9,
+        0.81
+      ],
+      "fit": "sam3d_layout",
+      "rmse_cm": 4.1,
+      "color": "#9C4E6A"
+    }
+  ],
+  "tracked_frames": 237,
+  "points": 1143646,
+  "pipeline": {
+    "gpu": "RTX 6000 Ada (48 GB)",
+    "minutes": {
+      "depth": 10,
+      "tracking": 3,
+      "models": 10
+    },
+    "sizes_mb": {
+      "phone_video": 11.9,
+      "uploaded": 21.4,
+      "results": 707,
+      "room": 7.7
+    }
+  }
+}
