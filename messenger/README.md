@@ -5,8 +5,9 @@ picture, price, size and whether it fits your room. Reply 1, 2 or 3 and it puts 
 texts back a picture of the room, plus a link to open it in 3D. Reply `undo` to take it out, `rooms` to list
 your rooms and `room 2` to switch.
 
-Built on [Photon Spectrum](https://photon.codes/docs/spectrum-ts/introduction): one agent loop for the
-terminal and iMessage.
+On iMessage it runs on [Photon 2.0](https://photon.codes/docs/beta/get-started/imessage) (`@photon-ai/api`):
+it polls for received messages and replies with `sendMessage`, uploading pictures as attachments. For trying it
+without an account it also opens Photon's terminal chat ([Spectrum](https://photon.codes/docs/spectrum-ts/introduction)).
 
 ## Run it
 
@@ -17,13 +18,16 @@ npm install
 npm start
 ```
 
-Without Photon keys this opens Photon's terminal chat, so you can try it with no account. To answer on
-iMessage too, add your Photon project's keys to otto's `.env`:
+The terminal chat always opens, with no account needed. To answer on iMessage too, put your Photon 2.0
+project ID and a project API key with message access in otto's `.env`:
 
 ```
-SPECTRUM_PROJECT_ID=pho_prj_...
-SPECTRUM_PROJECT_SECRET=...
+Photon_Project_ID=pho_prj_...
+Photon_FULL_API_KEY=pho_sk_...
 ```
+
+(`PHOTON_PROJECT_ID` / `PHOTON_API_KEY` work too.) Then text the project's iMessage line from the phone
+number assigned to it.
 
 Optional settings, also in `.env`:
 

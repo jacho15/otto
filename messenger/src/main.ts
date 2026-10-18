@@ -1,53 +1,65 @@
 // otto on Photon: text a furniture photo, get the closest pieces back, see one in your room.
 //
-// Without Photon keys it runs on the terminal provider (a local chat window, no account needed).
-// With SPECTRUM_PROJECT_ID and SPECTRUM_PROJECT_SECRET in otto's .env it also answers on iMessage.
+// Always runs Photon's terminal chat (no account needed). With a Photon 2.0 project ID and project API key
+// in otto's .env it also answers on iMessage.
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { Spectrum, attachment } from 'spectrum-ts'
-import { imessage } from 'spectrum-ts/providers/imessage'
 import { terminal } from 'spectrum-ts/providers/terminal'
-import { newState, parseChoice, respond, type Incoming, type Reply, type State } from './conversation'
+import { newState, parseChoice, respond, type Incoming, type State } from './conversation'
 import { ottoApi } from './ottoApi'
+import { runPhotonV2, type Outbox } from './photonV2'
 
 const envFile = resolve(import.meta.dirname, '../../.env')
 if (existsSync(envFile)) process.loadEnvFile(envFile)
 
-const OTTO_API = process.env.OTTO_API_URL ?? 'http://localhost:8000'
-const PUBLIC_URL = process.env.OTTO_PUBLIC_URL ?? 'http://localhost:5173'
-const ROOM = process.env.OTTO_ROOM ?? 'demo-living-room'
-const projectId = process.env.SPECTRUM_PROJECT_ID ?? process.env.PHOTON_PROJECT_ID
-const projectSecret = process.env.SPECTRUM_PROJECT_SECRET ?? process.env.PHOTON_PROJECT_SECRET
-const live = Boolean(projectId && projectSecret)
-
-const app = live
-  ? await Spectrum({ projectId: projectId!, projectSecret: projectSecret!, providers: [imessage.config(), terminal.config()] })
-  : await Spectrum({ providers: [terminal.config()] })
-console.log(`otto is listening on ${live ? 'iMessage and the terminal' : 'the terminal (add Photon keys to .env for iMessage)'}`)
+// The first of these names that is set wins.
+const env = (...names: string[]) => names.map((n) => process.env[n]).find((v) => v)
+const OTTO_API = env('OTTO_API_URL') ?? 'http://localhost:8000'
+const PUBLIC_URL = env('OTTO_PUBLIC_URL') ?? 'http://localhost:5173'
+const ROOM = env('OTTO_ROOM') ?? 'demo-living-room'
+const projectId = env('PHOTON_PROJECT_ID', 'Photon_Project_ID')
+const projectKey = env('PHOTON_API_KEY', 'Photon_FULL_API_KEY', 'Photon_Demo_API_KEY')
 
 const otto = ottoApi(OTTO_API)
 const states = new Map<string, State>()
 const queues = new Map<string, Promise<void>>()
 
-type Space = { send: (content: Parameters<typeof attachment>[0] | string | ReturnType<typeof attachment>) => Promise<unknown> }
-
-async function send(space: Space, replies: Reply[]) {
-  for (const r of replies) {
-    if ('text' in r) await space.send(r.text)
-    else await space.send(attachment(r.image, { mimeType: r.mimeType, name: r.name }))
+async function handle(key: string, outbox: Outbox, msg: Incoming) {
+  const state = states.get(key) ?? newState(ROOM)
+  const slow = msg.kind === 'photo' || parseChoice(msg.text, state.matches.length) !== null
+  // The slow steps get a heads-up and typing dots, so the chat doesn't look stuck.
+  if (msg.kind === 'photo') await outbox.text('Looking at your photo…')
+  else if (slow) await outbox.text('Putting it in your room. This takes about half a minute…')
+  if (slow) await outbox.typing(true)
+  try {
+    const turn = await respond(otto, state, msg, PUBLIC_URL)
+    states.set(key, turn.state)
+    for (const r of turn.replies) {
+      if ('text' in r) await outbox.text(r.text)
+      else await outbox.image(r.image, r.mimeType, r.name)
+    }
+  } finally {
+    if (slow) await outbox.typing(false)
   }
 }
 
-async function handle(key: string, space: Space, msg: Incoming) {
-  const state = states.get(key) ?? newState(ROOM)
-  // The slow steps get a heads-up first, so the chat doesn't look stuck.
-  if (msg.kind === 'photo') await space.send('Looking at your photo…')
-  else if (parseChoice(msg.text, state.matches.length)) await space.send('Putting it in your room. This takes about half a minute…')
-  const turn = await respond(otto, state, msg, PUBLIC_URL)
-  states.set(key, turn.state)
-  await send(space, turn.replies)
+/** One conversation at a time per chat, but chats don't wait for each other. */
+function enqueue(key: string, outbox: Outbox, msg: Incoming) {
+  const next = (queues.get(key) ?? Promise.resolve())
+    .then(() => handle(key, outbox, msg))
+    .catch((e) => console.error(`[${key}]`, e))
+  queues.set(key, next)
 }
 
+if (projectId && projectKey) {
+  void runPhotonV2({ key: projectKey, project: projectId }, enqueue)
+} else {
+  console.log('No Photon keys in .env, so iMessage is off. The terminal chat still works.')
+}
+
+const app = await Spectrum({ providers: [terminal.config()] })
+console.log('otto is listening on the terminal')
 for await (const [space, message] of app.messages) {
   if (message.direction !== 'inbound') continue
   const content = message.content
@@ -55,11 +67,10 @@ for await (const [space, message] of app.messages) {
   if (content.type === 'text') msg = { kind: 'text', text: content.text }
   else if (content.type === 'attachment') msg = { kind: 'photo', read: () => content.read(), mimeType: content.mimeType }
   if (!msg) continue
-  // One conversation at a time per chat, but chats don't wait for each other.
-  const key = `${message.platform}:${space.id}`
-  const prev = queues.get(key) ?? Promise.resolve()
-  const next = prev
-    .then(() => handle(key, space as unknown as Space, msg))
-    .catch((e) => console.error(`[${key}]`, e))
-  queues.set(key, next)
+  const outbox: Outbox = {
+    text: async (text) => void (await space.send(text)),
+    image: async (image, mimeType, name) => void (await space.send(attachment(image, { mimeType, name }))),
+    typing: async () => undefined,
+  }
+  enqueue(`terminal:${space.id}`, outbox, msg)
 }
