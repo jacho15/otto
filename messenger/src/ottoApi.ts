@@ -46,11 +46,6 @@ export function ottoApi(base: string): Otto {
       return Buffer.from(await res.arrayBuffer())
     },
 
-    async fetchFile(path) {
-      const res = await check(await fetch(url(path)))
-      return Buffer.from(await res.arrayBuffer())
-    },
-
     async listRooms() {
       const res = await check(await fetch(url('/api/rooms')))
       return ((await res.json()) as RoomSummary[]).map(({ id, name }) => ({ id, name }))

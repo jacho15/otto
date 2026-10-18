@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { incomingOf, relatedBody } from './photonV2'
+import { incomingOf, relatedBody, untilDispatched } from './photonV2'
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3])
 
@@ -7,7 +7,7 @@ describe('relatedBody', () => {
   it('is two parts: the JSON description, then the bytes', () => {
     const { body, contentType } = relatedBody(PNG, 'image/png', 'room.png')
     const boundary = contentType.match(/boundary=([^;]+)/)![1]
-    expect(contentType).toBe(`multipart/related; boundary=${boundary}; type="application/json"`)
+    expect(contentType).toBe(`multipart/related; boundary=${boundary}`) // Photon refuses extra parameters such as type=
     const text = body.toString('latin1')
     const parts = text.split(`--${boundary}`)
     expect(parts).toHaveLength(4) // preamble, json, file, closing "--"
@@ -42,5 +42,19 @@ describe('incomingOf', () => {
 
   it('ignores reactions, typing and the like', async () => {
     expect(await incomingOf({ content: { type: 'reaction', reaction: 'love' } } as never, download)).toBeNull()
+  })
+})
+
+describe('untilDispatched', () => {
+  it('waits while the message is only accepted', async () => {
+    const seen = ['accepted', 'accepted', 'dispatched']
+    expect(await untilDispatched(async () => seen.shift()!, 2000, 1)).toBe('dispatched')
+    expect(seen).toEqual([])
+  })
+  it('gives up after the time limit instead of holding the chat', async () => {
+    expect(await untilDispatched(async () => 'accepted', 20, 5)).toBe('accepted')
+  })
+  it('does not hold the chat when the status cannot be read', async () => {
+    expect(await untilDispatched(async () => { throw new Error('404') }, 2000, 1)).toBe('accepted')
   })
 })

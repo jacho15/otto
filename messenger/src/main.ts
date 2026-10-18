@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { Spectrum, attachment } from 'spectrum-ts'
 import { terminal } from 'spectrum-ts/providers/terminal'
-import { newState, parseChoice, respond, type Incoming, type State } from './conversation'
+import { combine, intentOf, newState, respond, type Incoming, type State } from './conversation'
 import { ottoApi } from './ottoApi'
 import { runPhotonV2, type Outbox } from './photonV2'
 
@@ -27,13 +27,15 @@ const lookbackSeconds = Number(env('OTTO_LOOKBACK_SECONDS') ?? 5)
 const otto = ottoApi(OTTO_API)
 const states = new Map<string, State>()
 const queues = new Map<string, Promise<void>>()
+const QUIET_MS = 2500 // messages within this gap are one thought: a photo plus "these look fire"
+const pending = new Map<string, { batch: Incoming[]; timer: NodeJS.Timeout }>()
 
 async function handle(key: string, outbox: Outbox, msg: Incoming) {
   const state = states.get(key) ?? newState(ROOM)
-  const slow = msg.kind === 'photo' || parseChoice(msg.text, state.matches.length) !== null
-  // The slow steps get a heads-up and typing dots, so the chat doesn't look stuck.
-  if (msg.kind === 'photo') await outbox.text('Looking at your photo…')
-  else if (slow) await outbox.text('Putting it in your room. This takes about half a minute…')
+  const slow = msg.kind === 'photo' || intentOf(msg.text, state.matches.length).kind === 'choice'
+  // The slow steps get one heads-up and typing dots, so the chat doesn't look stuck.
+  if (msg.kind === 'photo') await outbox.text('Love it. Finding the closest match and putting it in your room, give me about half a minute…')
+  else if (slow) await outbox.text('Swapping it in, one moment…')
   if (slow) await outbox.typing(true)
   try {
     const turn = await respond(otto, state, msg, PUBLIC_URL)
@@ -47,11 +49,28 @@ async function handle(key: string, outbox: Outbox, msg: Incoming) {
   }
 }
 
-/** One conversation at a time per chat, but chats don't wait for each other. */
+/** Collect a chat's messages until it goes quiet, then answer them together. */
 function enqueue(key: string, outbox: Outbox, msg: Incoming) {
+  const entry = pending.get(key) ?? { batch: [], timer: setTimeout(() => undefined, 0) }
+  clearTimeout(entry.timer)
+  entry.batch.push(msg)
+  entry.timer = setTimeout(() => {
+    pending.delete(key)
+    const one = combine(entry.batch, (states.get(key) ?? newState(ROOM)).matches.length)
+    if (one) answer(key, outbox, one)
+  }, QUIET_MS)
+  pending.set(key, entry)
+}
+
+/** One conversation at a time per chat, but chats don't wait for each other. */
+function answer(key: string, outbox: Outbox, msg: Incoming) {
   const next = (queues.get(key) ?? Promise.resolve())
     .then(() => handle(key, outbox, msg))
-    .catch((e) => console.error(`[${key}] reply failed:`, e instanceof Error ? e.message : e, (e as { body?: unknown })?.body ?? ''))
+    .catch((e) => {
+      const err = e as { message?: string; body?: unknown; operationId?: string; cause?: { message?: string; name?: string; cause?: { message?: string; code?: string } } }
+      const cause = err.cause ? ` (cause: ${err.cause.name ?? ''} ${err.cause.message ?? ''} ${err.cause.cause?.code ?? err.cause.cause?.message ?? ''})` : ''
+      console.error(`[${key}] reply failed${err.operationId ? ` in ${err.operationId}` : ''}: ${err.message ?? e}${cause}`, err.body ?? '')
+    })
   queues.set(key, next)
 }
 

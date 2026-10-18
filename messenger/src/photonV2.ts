@@ -18,6 +18,25 @@ type Page = Awaited<ReturnType<Photon['projects']['listMessages']>>
 type Item = Page['items'][number]
 
 const POLL_MS = 2000
+const API = 'https://api.photon.codes/v1'
+// Idempotency keys are per run: a restarted bridge may answer the same message again, with a different reply.
+const RUN = Date.now().toString(36)
+
+/** Wait until a sent message is no longer just "accepted" (it went out, or failed), or until the time runs out. */
+export async function untilDispatched(status: () => Promise<string>, timeoutMs = 10_000, everyMs = 400): Promise<string> {
+  const deadline = Date.now() + timeoutMs
+  let last = 'accepted'
+  while (Date.now() < deadline) {
+    try {
+      last = await status()
+    } catch {
+      return last // can't tell; don't hold the conversation up
+    }
+    if (last !== 'accepted' && last !== 'pending' && last !== 'created') return last
+    await sleep(everyMs)
+  }
+  return last
+}
 
 /** A two-part multipart/related body: the attachment's JSON description, then its bytes. */
 export function relatedBody(bytes: Buffer, contentType: string, filename: string): { body: Buffer; contentType: string } {
@@ -28,7 +47,7 @@ export function relatedBody(bytes: Buffer, contentType: string, filename: string
     bytes,
     Buffer.from(`\r\n--${boundary}--\r\n`),
   ])
-  return { body, contentType: `multipart/related; boundary=${boundary}; type="application/json"` }
+  return { body, contentType: `multipart/related; boundary=${boundary}` }
 }
 
 /** The text or photo in a received message, or null for anything else (reactions, typing, ...). */
@@ -83,24 +102,34 @@ export async function runPhotonV2(cfg: { key: string; project: string; lookbackS
           const spaceId = m.space.id
           const senderId = m.receivedBy.id
           let n = 0
-          const send = (content: Parameters<Photon['projects']['sendMessage']>[0]['body']['content']) =>
-            photon.projects
-              .sendMessage({
-                path: { id: project },
-                headers: { 'idempotency-key': `otto:${m.id}:${n++}` },
-                // plain messages, not threaded replies: shared iMessage lines refuse replies (409 SPACE_NOT_SENDABLE)
-                body: { spaceId, senderId, content },
-              })
-              .then(() => undefined)
+          const send = async (content: Parameters<Photon['projects']['sendMessage']>[0]['body']['content']) => {
+            const sent = await photon.projects.sendMessage({
+              path: { id: project },
+              headers: { 'idempotency-key': `otto:${RUN}:${m.id}:${n++}` },
+              // plain messages, not threaded replies: shared iMessage lines refuse replies (409 SPACE_NOT_SENDABLE)
+              body: { spaceId, senderId, content },
+            })
+            // Photon sends asynchronously, so back-to-back messages can arrive out of order.
+            // Wait until this one has left before sending the next.
+            const messageId = (sent as { id: string }).id
+            await untilDispatched(async () => {
+              const got = (await photon.projects.getMessage({ path: { id: project, messageId } })) as { status?: unknown } | undefined
+              return typeof got?.status === 'string' ? got.status : 'unknown'
+            })
+          }
           const outbox: Outbox = {
             text: (text) => send({ type: 'text', format: 'plain', text }),
             async image(bytes, mimeType, name) {
               const { body, contentType } = relatedBody(bytes, mimeType, name)
-              const att = await photon.projects.uploadAttachment({
-                path: { id: project },
-                headers: { 'content-length': String(body.length), 'content-type': contentType, 'idempotency-key': `otto:${m.id}:upload:${n}` },
-                body: new Blob([new Uint8Array(body)], { type: contentType }),
+              // Plain fetch, not the SDK: the SDK wants a hand-set content-length, which Node's fetch rejects
+              // (UND_ERR_INVALID_ARG). fetch works the length out itself.
+              const res = await fetch(`${API}/projects/${encodeURIComponent(project)}/attachments`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${cfg.key}`, 'content-type': contentType, 'idempotency-key': `otto:${RUN}:${m.id}:upload:${n}` },
+                body: new Uint8Array(body),
               })
+              if (!res.ok) throw new Error(`Photon upload failed (${res.status}): ${(await res.text()).slice(0, 200)}`)
+              const att = (await res.json()) as { id: string }
               await send({ type: 'attachment', attachmentId: att.id })
             },
             typing: (on) =>
