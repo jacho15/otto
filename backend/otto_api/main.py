@@ -17,14 +17,16 @@ from pydantic import BaseModel, Field, StringConstraints, field_validator
 from .agent import AgentError, make_client, run_checkout
 from .checkout import MockVisaProvider, approval_violations
 from .fit import find_warnings
-from .place import add_item
+from .place import add_at, add_item
 from .places import router as places_router
+from .suggest import router as suggest_router
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 load_dotenv(REPO_ROOT / ".env")
 
 app = FastAPI(title="Otto API")
 app.include_router(places_router)
+app.include_router(suggest_router)
 
 
 @app.exception_handler(RequestValidationError)
@@ -57,6 +59,8 @@ class RoomSize(BaseModel):
 class ObjectAdd(BaseModel):
     catalog_id: str
     replace: str | None = None
+    pos: Annotated[list[Number], Field(min_length=2, max_length=2)] | None = None
+    yaw: Number | None = None
 
 
 class MandateBody(BaseModel):
@@ -256,12 +260,20 @@ def add_object(room_id: str, body: ObjectAdd):
         if item is None:
             raise HTTPException(404, "Catalog item not found")
         if body.replace is not None:
+            if body.pos is not None:
+                raise HTTPException(422, "Give either replace or pos, not both")
             target = find_object(scene, body.replace)
             if target.get("hidden"):
                 raise HTTPException(409, "Object is hidden")
             if not target.get("movable", True):
                 raise HTTPException(409, "Object is not movable")
-        scene["objects"], name = add_item(scene["room"], scene["objects"], item, body.replace)
+        if body.pos is not None:
+            added = add_at(scene["room"], scene["objects"], item, body.pos, body.yaw or 0.0)
+            if added is None:
+                raise HTTPException(409, "That spot is no longer free.")
+            scene["objects"], name = added
+        else:
+            scene["objects"], name = add_item(scene["room"], scene["objects"], item, body.replace)
         save_scene(room_id, scene)
         return {**room_response(room_id, scene), "added": name}
 

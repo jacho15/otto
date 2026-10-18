@@ -214,3 +214,51 @@ def test_place_tries_quarter_turn():
     corners = footprint_corners(new["pos"], new["size"], new["yaw"])
     assert new["yaw"] != 0.0
     assert not outside_walls(corners, room["size_xy"])
+
+
+def test_add_at_exact_pose(client, data_dir):
+    r = client.post(URL, json={"catalog_id": "small-chair", "pos": [1.0, -1.0], "yaw": 1.5})
+    assert r.status_code == 200
+    body = r.json()
+    obj = find(body["objects"], body["added"])
+    assert body["added"] == "small_chair"
+    assert obj["pos"] == [1.0, -1.0, 0.0] and obj["yaw"] == 1.5
+    assert obj["product"]["title"] == "small-chair title" and "replaces" not in obj
+    assert body["warnings"] == []
+    assert find(saved(data_dir)["objects"], "small_chair") == obj
+
+
+def test_add_at_defaults_yaw_to_zero(client):
+    body = client.post(URL, json={"catalog_id": "flat-lamp", "pos": [1.0, -1.0]}).json()
+    obj = find(body["objects"], body["added"])
+    assert obj["yaw"] == 0.0 and obj["shape"] == "lamp"
+
+
+def test_add_at_taken_spot_is_409(client, data_dir):
+    before = saved(data_dir)
+    for pos in ([0.0, 1.0], [2.45, 0.0], [-5.0, 0.0]):  # on the sofa, over the wall, outside
+        r = client.post(URL, json={"catalog_id": "small-chair", "pos": pos})
+        assert r.status_code == 409 and r.json()["detail"] == "That spot is no longer free."
+    assert saved(data_dir) == before
+
+
+def test_add_at_ignores_hidden_objects(client, data_dir):
+    path = data_dir / "rooms" / ROOM / "scene.json"
+    scene = saved(data_dir)
+    find(scene["objects"], "sofa")["hidden"] = True
+    path.write_text(json.dumps(scene), "utf-8")
+    assert client.post(URL, json={"catalog_id": "wide-bench", "pos": [0.0, 1.0]}).status_code == 200
+    assert client.post(URL, json={"catalog_id": "small-chair", "pos": [-1.0, -1.0]}).status_code == 409
+
+
+def test_add_replace_with_pos_is_422(client, data_dir):
+    before = saved(data_dir)
+    r = client.post(URL, json={"catalog_id": "small-chair", "replace": "chair", "pos": [1.0, -1.0]})
+    assert r.status_code == 422
+    assert saved(data_dir) == before
+
+
+def test_add_pos_validation(client):
+    for extra in ({"pos": [1.0]}, {"pos": [1, 2, 3]}, {"pos": ["a", "b"]}, {"pos": [1, 2], "yaw": "x"}):
+        assert client.post(URL, json={"catalog_id": "small-chair", **extra}).status_code == 422, extra
+    assert client.post(URL, content='{"catalog_id": "small-chair", "pos": [NaN, 0]}').status_code == 422

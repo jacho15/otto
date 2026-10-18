@@ -9,6 +9,7 @@ import type {
   Room,
   RoomSummary,
   SavedItem,
+  SuggestResult,
   Vec2,
 } from './types'
 
@@ -58,11 +59,12 @@ export const deleteObject = (id: string, name: string) =>
 
 export const getCatalog = () => request<CatalogItem[]>('/api/catalog')
 
-export const addObject = (id: string, catalogId: string, replace?: string) =>
+/** `at` places the piece exactly there; the server answers 409 if the spot is taken. */
+export const addObject = (id: string, catalogId: string, replace?: string, at?: { pos: Vec2; yaw: number }) =>
   request<AddResult>(`/api/rooms/${encodeURIComponent(id)}/objects`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ catalog_id: catalogId, replace: replace ?? null }),
+    body: JSON.stringify({ catalog_id: catalogId, replace: replace ?? null, ...at }),
   })
 
 const json = (body: unknown): RequestInit => ({
@@ -108,6 +110,12 @@ export const unsaveItem = (catalogId: string) =>
 
 export const agentDesign = (id: string, instruction: string) =>
   request<DesignResult>(`/api/rooms/${encodeURIComponent(id)}/agent/design`, {
+    method: 'POST',
+    ...json({ instruction }),
+  })
+
+export const agentSuggest = (id: string, instruction: string) =>
+  request<SuggestResult>(`/api/rooms/${encodeURIComponent(id)}/agent/suggest`, {
     method: 'POST',
     ...json({ instruction }),
   })

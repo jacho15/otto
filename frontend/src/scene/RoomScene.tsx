@@ -26,7 +26,16 @@ import {
 } from 'three'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
 import { meshUrl } from '../api'
-import { footprintCorners, footprintGap, formatDistance, roomToThree, threeToRoom, wallGaps } from '../geometry'
+import {
+  footprintCorners,
+  footprintGap,
+  footprintsOverlap,
+  formatDistance,
+  outsideWalls,
+  roomToThree,
+  threeToRoom,
+  wallGaps,
+} from '../geometry'
 import type { Room, RoomObject, Vec2, Vec3 } from '../types'
 import StandIn from './StandIn'
 
@@ -35,12 +44,15 @@ const WARN = '#C2412D'
 const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0)
 const GRID_STEP = 0.5 // metres
 const GHOST_OPACITY = 0.15
+const PREVIEW_OPACITY = 0.45
 
 type View = 'persp' | 'top'
 
 interface Props {
   room: Room
   objects: RoomObject[]
+  /** Suggested pieces, drawn as non-interactive ghosts. */
+  previews?: RoomObject[]
   selected: string | null
   warned: Set<string>
   dragging: boolean
@@ -65,7 +77,7 @@ function floorHit(ray: Ray): Vec2 | null {
 }
 
 export default function RoomScene(props: Props) {
-  const { room, objects, selected, warned, dragging, onSelect } = props
+  const { room, objects, previews = [], selected, warned, dragging, onSelect } = props
   const [W, D] = room.room.size_xy
   const span = Math.max(W, D)
   const drag = useRef<Drag | null>(null)
@@ -73,6 +85,12 @@ export default function RoomScene(props: Props) {
   const [showPoints, setShowPoints] = useState(false)
   const pointCloud = room.room.point_cloud
   const selectedObj = objects.find((o) => o.name === selected && !o.hidden)
+
+  const visibleCorners = objects.filter((o) => !o.hidden).map((o) => footprintCorners(o.pos, o.size, o.yaw))
+  const previewClashes = (o: RoomObject) => {
+    const corners = footprintCorners(o.pos, o.size, o.yaw)
+    return outsideWalls(corners, room.room.size_xy) || visibleCorners.some((c) => footprintsOverlap(corners, c))
+  }
 
   const startDrag = (obj: RoomObject, e: ThreeEvent<PointerEvent>) => {
     const hit = floorHit(e.ray)
@@ -143,7 +161,15 @@ export default function RoomScene(props: Props) {
             />
           ))}
         </Suspense>
+        {previews.map((o) => (
+          <Suspense key={o.name} fallback={null}>
+            <Preview roomId={room.id} obj={o} />
+          </Suspense>
+        ))}
 
+        {previews.map((o) => (
+          <Footprint key={o.name} obj={o} color={previewClashes(o) ? WARN : ACCENT} dashed />
+        ))}
         {objects
           .filter((o) => !o.hidden && (o.name === selected || warned.has(o.name)))
           .map((o) => (
@@ -272,7 +298,22 @@ function Piece({
   )
 }
 
-function GlbModel({ url, obj }: { url: string; obj: RoomObject }) {
+/** A suggested piece: faint and unclickable. */
+function Preview({ roomId, obj }: { roomId: string; obj: RoomObject }) {
+  return (
+    <group position={roomToThree([obj.pos[0], obj.pos[1], 0])} rotation-y={obj.yaw}>
+      <group rotation-x={-Math.PI / 2}>
+        {obj.mesh ? (
+          <GlbModel url={meshUrl(roomId, obj.mesh)} obj={obj} ghostOpacity={PREVIEW_OPACITY} />
+        ) : (
+          <StandIn obj={obj} ghostOpacity={PREVIEW_OPACITY} />
+        )}
+      </group>
+    </group>
+  )
+}
+
+function GlbModel({ url, obj, ghostOpacity = GHOST_OPACITY }: { url: string; obj: RoomObject; ghostOpacity?: number }) {
   const { scene } = useGLTF(url)
   const [r, g, b, a] = obj.rgba
   const ghost = !!obj.hidden
@@ -308,7 +349,7 @@ function GlbModel({ url, obj }: { url: string; obj: RoomObject }) {
         const own = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map((m) => {
           const c = m.clone()
           c.transparent = true
-          c.opacity = GHOST_OPACITY
+          c.opacity = ghostOpacity
           c.depthWrite = false
           return c
         })
@@ -316,14 +357,16 @@ function GlbModel({ url, obj }: { url: string; obj: RoomObject }) {
       }
     })
     return root
-  }, [scene, r, g, b, a, ghost])
+  }, [scene, r, g, b, a, ghost, ghostOpacity])
 
   return <primitive object={model} />
 }
 
-function Footprint({ obj, color }: { obj: RoomObject; color: string }) {
+function Footprint({ obj, color, dashed }: { obj: RoomObject; color: string; dashed?: boolean }) {
   const points = footprintCorners(obj.pos, obj.size, obj.yaw).map(([x, y]) => roomToThree([x, y, 0.01]))
-  return <Line points={[...points, points[0]]} color={color} lineWidth={2.5} />
+  return (
+    <Line points={[...points, points[0]]} color={color} lineWidth={2.5} dashed={dashed} dashSize={0.08} gapSize={0.05} />
+  )
 }
 
 /** Orthographic camera looking straight down, zoomed so the whole floor fits. */

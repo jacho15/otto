@@ -234,6 +234,22 @@ def front_faces_wall(corners, size_xy, yaw_degrees):
     return None
 
 
+def spots_for(room_id, catalog_id, near, against_wall):
+    """The find_spots tool result (JSON text) for a room. Raises ToolError."""
+    from . import main
+    with main.lock:
+        scene = main.load_scene(room_id)
+        item = next((i for i in main.load_catalog() if i["id"] == catalog_id), None)
+    if item is None:
+        raise ToolError(f"Unknown catalog id {catalog_id}. Use ids from get_catalog.")
+    target = None
+    if near is not None:
+        target = next((o for o in scene["objects"] if o["name"] == near and not o.get("hidden")), None)
+        if target is None:
+            raise ToolError(f"No piece named {near}. Use names from get_room.")
+    return json.dumps(candidate_spots(scene["room"], scene["objects"], item["size"], target, against_wall))
+
+
 def run_design(client, room_id, instruction):
     """Run the design agent once. Return {"message", "changes", "room"}."""
     from . import main
@@ -311,17 +327,7 @@ def run_design(client, room_id, instruction):
         """Find up to 5 spots where a catalog piece fits (inside the walls, no overlap). Saves nothing.
         near ranks spots by distance to that object, else by distance to the room centre.
         against_wall puts the back of the piece on a wall. Pass a spot to place_item."""
-        with main.lock:
-            scene = main.load_scene(room_id)
-            item = next((i for i in main.load_catalog() if i["id"] == catalog_id), None)
-        if item is None:
-            raise ToolError(f"Unknown catalog id {catalog_id}. Use ids from get_catalog.")
-        target = None
-        if near is not None:
-            target = next((o for o in visible(scene) if o["name"] == near), None)
-            if target is None:
-                raise ToolError(f"No piece named {near}. Use names from get_room.")
-        return json.dumps(candidate_spots(scene["room"], scene["objects"], item["size"], target, against_wall))
+        return spots_for(room_id, catalog_id, near, against_wall)
 
     @beta_tool(input_schema=PLACE_SCHEMA, strict=True)
     def place_item(catalog_id: str, x: float, y: float, yaw_degrees: float) -> str:

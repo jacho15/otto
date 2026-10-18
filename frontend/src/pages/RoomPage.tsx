@@ -5,13 +5,15 @@ import { orderedNames } from '../checkoutLogic'
 import { findWarnings, warnedNames } from '../geometry'
 import RoomScene from '../scene/RoomScene'
 import { mergeServerObjects } from '../saveLogic'
-import type { Order, Room, RoomObject, Vec2 } from '../types'
+import { acceptError, previewObject } from '../suggestLogic'
+import type { Order, Room, RoomObject, Suggestion, Vec2 } from '../types'
 import { useSaveQueue } from '../useSaveQueue'
 import Checkout from './Checkout'
 import DesignPanel from './DesignPanel'
 import { ErrorCard, itemCount } from './Home'
 import RoomSize from './RoomSize'
 import Shop from './Shop'
+import Suggestions from './Suggestions'
 
 const STEP = (15 * Math.PI) / 180
 
@@ -25,6 +27,7 @@ export default function RoomPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [tab, setTab] = useState<'room' | 'shop' | 'design' | 'checkout'>('room')
   const [adding, setAdding] = useState(false)
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const draggingRef = useRef<string | null>(null)
   const resyncAfterDrag = useRef(false)
@@ -100,6 +103,39 @@ export default function RoomPage() {
     [id, exclusive],
   )
 
+  // Place a suggestion exactly where it was previewed. Resolves to an error message, or null on success.
+  const acceptSuggestion = useCallback(
+    (s: Suggestion) =>
+      new Promise<string | null>((resolve) => {
+        if (addingRef.current) return resolve('Another piece is being added. Try again in a moment.')
+        addingRef.current = true
+        replacingRef.current = null
+        setAdding(true)
+        exclusive(async (pending) => {
+          let failure: string | null = null
+          try {
+            const r = await addObject(id, s.catalog_id, undefined, { pos: s.pos, yaw: s.yaw })
+            setSaveError(null)
+            setObjects((local) => mergeServerObjects(local, r.objects, draggingRef.current, pending(), r.added))
+            setSelected(r.added)
+            addEpoch.current++
+            setSuggestions((list) => list.filter((x) => x.catalog_id !== s.catalog_id))
+          } catch (e) {
+            failure = acceptError(e)
+          } finally {
+            addingRef.current = false
+            setAdding(false)
+            resolve(failure)
+          }
+        })
+      }),
+    [id, exclusive],
+  )
+
+  const skipSuggestion = useCallback((s: Suggestion) => {
+    setSuggestions((list) => list.filter((x) => x.catalog_id !== s.catalog_id))
+  }, [])
+
   const updateObject = useCallback((name: string, patch: Partial<RoomObject>) => {
     setObjects((objs) => objs.map((o) => (o.name === name ? { ...o, ...patch } : o)))
   }, [])
@@ -161,6 +197,7 @@ export default function RoomPage() {
 
   const sizeXY = room?.room.size_xy
   const warned = useMemo(() => (sizeXY ? warnedNames(findWarnings(objects, sizeXY)) : new Set<string>()), [objects, sizeXY])
+  const previews = useMemo(() => suggestions.map(previewObject), [suggestions])
   const visible = useMemo(() => objects.filter((o) => !o.hidden), [objects])
   const selectedObj = visible.find((o) => o.name === selected)
   const replaceTarget =
@@ -189,6 +226,7 @@ export default function RoomPage() {
         <RoomScene
           room={room}
           objects={objects}
+          previews={tab === 'shop' ? previews : undefined}
           selected={selected}
           warned={warned}
           dragging={dragging !== null}
@@ -222,6 +260,16 @@ export default function RoomPage() {
         </div>
         <div hidden={tab !== 'checkout'}>
           <Checkout roomId={id} orders={orders} setOrders={setOrders} />
+        </div>
+        <div hidden={tab !== 'shop'}>
+          <Suggestions
+            roomId={id}
+            suggestions={suggestions}
+            busy={adding}
+            onSuggestions={setSuggestions}
+            onAccept={acceptSuggestion}
+            onSkip={skipSuggestion}
+          />
         </div>
         {tab === 'shop' ? (
           <Shop room={room.room} objects={objects} target={replaceTarget} busy={adding} onAdd={addPiece} />

@@ -140,3 +140,27 @@ export interface DesignResult {
   changes: DesignChange[]
   room: Room
 }
+
+export interface Suggestion {
+  catalog_id: string
+  title: string
+  label: string
+  price: number
+  currency: string
+  url: string
+  size: Vec3 // metres
+  rgba: [number, number, number, number]
+  model: string | null
+  photo: string | null
+  shape?: string
+  pos: Vec2
+  yaw: number // radians
+  reason: string
+  mandate_ok: boolean
+  violations: string[]
+}
+
+export interface SuggestResult {
+  message: string
+  suggestions: Suggestion[]
+}

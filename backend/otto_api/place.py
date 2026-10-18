@@ -81,6 +81,21 @@ def catalog_object(item, name, pos, yaw):
     return obj
 
 
+def add_at(room, objects, item, pos, yaw):
+    """Return (new object list, new object name) with the item exactly at pos and yaw.
+
+    Return None if the footprint leaves the walls or overlaps a visible object.
+    """
+    corners = footprint_corners(pos, item["size"], yaw)
+    if outside_walls(corners, room["size_xy"]):
+        return None
+    for o in objects:
+        if not o.get("hidden") and footprints_overlap(corners, footprint_corners(o["pos"], o["size"], o["yaw"])):
+            return None
+    name = unique_name(item["id"], objects)
+    return objects + [catalog_object(item, name, pos, yaw)], name
+
+
 def add_item(room, objects, item, replace=None):
     """Return (new object list, new object name). Inputs are not changed.
 

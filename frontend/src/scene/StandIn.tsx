@@ -17,7 +17,7 @@ function geometryOf({ kind, size: [sx, sy, sz], round }: Part): BufferGeometry {
 }
 
 /** A box-and-cylinder model for a piece with no mesh. Goes inside the room-frame (z-up) group. */
-export default function StandIn({ obj }: { obj: RoomObject }) {
+export default function StandIn({ obj, ghostOpacity = GHOST_OPACITY }: { obj: RoomObject; ghostOpacity?: number }) {
   const [r, g, b, a] = obj.rgba
   const ghost = !!obj.hidden
   const [w, d, h] = obj.size
@@ -29,14 +29,14 @@ export default function StandIn({ obj }: { obj: RoomObject }) {
     const make = (color: Color) =>
       new MeshStandardMaterial({
         color,
-        opacity: ghost ? GHOST_OPACITY : a,
+        opacity: ghost ? ghostOpacity : a,
         transparent: ghost || a < 1,
         depthWrite: !ghost,
         roughness: 0.8,
       })
     const base = new Color().setRGB(r, g, b, SRGBColorSpace)
     return [make(base), make(base.clone().multiplyScalar(DARKEN))]
-  }, [r, g, b, a, ghost])
+  }, [r, g, b, a, ghost, ghostOpacity])
 
   useEffect(() => () => geoms.forEach((x) => x.dispose()), [geoms])
   useEffect(() => () => [light, dark].forEach((m) => m.dispose()), [light, dark])
