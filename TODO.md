@@ -9,10 +9,10 @@ Website work only. The video-to-room pipeline is being built on a separate branc
 - [x] Demo room with 5 IKEA pieces
 
 ## 1. Shop
-- [ ] `catalog.json` with the 5 IKEA items (title, URL, price, size W×D×H, model file, photo)
-- [ ] Catalog panel in the room view: product cards with photo, price, size and shop link
-- [ ] "Add to room": place the product at its real size in the nearest free spot, then select it
-- [ ] "Replace": pick a piece in the room and swap in a product. The old piece shows as a faint ghost, and the new one takes its spot against the same wall. Removing the new piece brings the old one back.
+- [x] `catalog.json` with the 5 IKEA items (title, URL, price, size W×D×H, model file, photo)
+- [x] Catalog panel in the room view: product cards with photo, price, size and shop link
+- [x] "Add to room": place the product at its real size in the nearest free spot, then select it
+- [x] "Replace": pick a piece in the room and swap in a product. The old piece shows as a faint ghost, and the new one takes its spot (nudged inside the walls if needed). Removing the new piece brings the old one back.
 - [ ] Saved products (wishlist) shared across all rooms
 
 ## 2. Add any furniture
@@ -70,3 +70,5 @@ Website work only. The video-to-room pipeline is being built on a separate branc
 - [ ] Totals add mixed currencies under one currency
 - [ ] Backend lock only covers one server process
 - [ ] Error card always says to check port 8000, even for "room not found"
+- [ ] "Add to room" copies the model into the room's `meshes/` and edits `scene.json`, so testing on the demo room leaves changes in git. Point catalog pieces at the catalog's model file instead.
+- [ ] Deleting a piece while its Replace is in flight leaves the new piece with a `replaces` link to nothing

@@ -56,7 +56,8 @@ export function outsideWalls(corners: Vec2[], sizeXY: Vec2, tol = TOL): boolean 
   return corners.some(([x, y]) => Math.abs(x) > hx + tol || Math.abs(y) > hy + tol)
 }
 
-export function findWarnings(objects: RoomObject[], sizeXY: Vec2): Warning[] {
+export function findWarnings(all: RoomObject[], sizeXY: Vec2): Warning[] {
+  const objects = all.filter((o) => !o.hidden) // ghosts take no space
   const corners = new Map(objects.map((o) => [o.name, footprintCorners(o.pos, o.size, o.yaw)]))
   const warnings: Warning[] = []
   objects.forEach((a, i) => {

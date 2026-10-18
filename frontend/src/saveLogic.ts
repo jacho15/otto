@@ -36,18 +36,25 @@ export async function drainQueue(
 
 /**
  * Merge a server response into local objects. Local order and membership win,
- * so an object deleted locally stays gone. A piece being dragged or with a
- * newer save queued keeps its local state.
+ * so an object deleted locally stays gone; the one exception is the piece the
+ * server just added. A piece being dragged or with a newer save queued keeps
+ * its local state, except the hidden flag, which always comes from the server.
  */
 export function mergeServerObjects(
   local: RoomObject[],
   server: RoomObject[],
   dragging: string | null,
   pending: Set<string>,
+  added?: string,
 ): RoomObject[] {
   const byName = new Map(server.map((o) => [o.name, o]))
-  return local.map((mine) => {
+  const merged = local.map((mine) => {
     const theirs = byName.get(mine.name)
-    return !theirs || mine.name === dragging || pending.has(mine.name) ? mine : theirs
+    if (!theirs) return mine
+    if (mine.name !== dragging && !pending.has(mine.name)) return theirs
+    if (!mine.hidden === !theirs.hidden) return mine
+    return { ...mine, hidden: theirs.hidden }
   })
+  const fresh = added && byName.get(added)
+  return fresh && !local.some((o) => o.name === added) ? [...merged, fresh] : merged
 }

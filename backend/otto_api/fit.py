@@ -47,7 +47,8 @@ def outside_walls(corners, size_xy, tol=TOL):
 
 
 def find_warnings(room, objects):
-    """Overlap and wall warnings for a list of scene objects."""
+    """Overlap and wall warnings for a list of scene objects. Hidden ones are skipped."""
+    objects = [o for o in objects if not o.get("hidden")]
     corners = {
         o["name"]: footprint_corners(o["pos"], o["size"], o["yaw"]) for o in objects
     }

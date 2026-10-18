@@ -118,6 +118,12 @@ describe('findWarnings', () => {
     ])
     expect([...warnedNames(w)].sort()).toEqual(['a', 'b', 'c'])
   })
+
+  it('skips hidden objects', () => {
+    const ghost = { ...obj('b', 0.5, 0), hidden: true }
+    const outside = { ...obj('c', 2, 0), hidden: true }
+    expect(findWarnings([obj('a', 0, 0), ghost, outside], [4, 4])).toEqual([])
+  })
 })
 
 describe('wallGaps', () => {

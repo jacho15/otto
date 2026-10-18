@@ -33,6 +33,7 @@ const ACCENT = '#2F5D50'
 const WARN = '#C2412D'
 const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0)
 const GRID_STEP = 0.5 // metres
+const GHOST_OPACITY = 0.15
 
 type View = 'persp' | 'top'
 
@@ -70,7 +71,7 @@ export default function RoomScene(props: Props) {
   const [view, setView] = useState<View>('persp')
   const [showPoints, setShowPoints] = useState(false)
   const pointCloud = room.room.point_cloud
-  const selectedObj = objects.find((o) => o.name === selected)
+  const selectedObj = objects.find((o) => o.name === selected && !o.hidden)
 
   const startDrag = (obj: RoomObject, e: ThreeEvent<PointerEvent>) => {
     const hit = floorHit(e.ray)
@@ -143,7 +144,7 @@ export default function RoomScene(props: Props) {
         </Suspense>
 
         {objects
-          .filter((o) => o.name === selected || warned.has(o.name))
+          .filter((o) => !o.hidden && (o.name === selected || warned.has(o.name)))
           .map((o) => (
             <Footprint key={o.name} obj={o} color={warned.has(o.name) ? WARN : ACCENT} />
           ))}
@@ -248,14 +249,15 @@ function Piece({
 }) {
   const { scene } = useGLTF(meshUrl(roomId, obj.mesh))
   const [r, g, b, a] = obj.rgba
+  const ghost = !!obj.hidden
 
   const model = useMemo(() => {
     const root = scene.clone(true)
     root.traverse((node) => {
       const mesh = node as Mesh
       if (!mesh.isMesh) return
-      mesh.castShadow = true
-      mesh.receiveShadow = true
+      mesh.castShadow = !ghost
+      mesh.receiveShadow = !ghost
       const geom = mesh.geometry
       // Meshes written by trimesh carry no normals; without them everything renders black.
       const flat = !geom.attributes.normal
@@ -274,9 +276,21 @@ function Piece({
           flatShading: flat,
         })
       }
+      if (ghost) {
+        // A replaced piece: faint, unclickable. Clone materials so the cached GLTF stays untouched.
+        mesh.raycast = () => null
+        const own = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map((m) => {
+          const c = m.clone()
+          c.transparent = true
+          c.opacity = GHOST_OPACITY
+          c.depthWrite = false
+          return c
+        })
+        mesh.material = Array.isArray(mesh.material) ? own : own[0]
+      }
     })
     return root
-  }, [scene, r, g, b, a])
+  }, [scene, r, g, b, a, ghost])
 
   return (
     <group

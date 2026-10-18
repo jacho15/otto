@@ -28,6 +28,34 @@ describe('mergeServerObjects', () => {
     const out = mergeServerObjects(local, server, 'a', new Set(['b']))
     expect(out.map((o) => o.pos[0])).toEqual([1, 2, 9])
   })
+
+  it('adds the server-added object, and no other unknown one', () => {
+    const local = [obj('a')]
+    const server = [obj('a'), obj('new'), obj('gone')]
+    expect(mergeServerObjects(local, server, null, new Set(), 'new').map((o) => o.name)).toEqual(['a', 'new'])
+  })
+
+  it('does not duplicate the added object if it is already local', () => {
+    const local = [obj('a'), obj('new')]
+    const server = [obj('a'), obj('new', 5)]
+    const out = mergeServerObjects(local, server, null, new Set(), 'new')
+    expect(out.map((o) => o.name)).toEqual(['a', 'new'])
+    expect(out[1].pos[0]).toBe(5)
+  })
+
+  it('takes the hidden flag from the server, including for dragged and pending pieces', () => {
+    const local = [obj('a', 1), obj('b', 2), obj('c', 3)]
+    const server = [{ ...obj('a', 9), hidden: true }, { ...obj('b', 9), hidden: true }, { ...obj('c', 9), hidden: true }]
+    const out = mergeServerObjects(local, server, 'a', new Set(['b']))
+    expect(out.map((o) => [o.pos[0], o.hidden])).toEqual([[1, true], [2, true], [9, true]])
+  })
+
+  it('shows an original again once the server drops its hidden flag', () => {
+    const local = [{ ...obj('a'), hidden: true }, { ...obj('b'), hidden: true }]
+    const server = [obj('a'), obj('b')]
+    const out = mergeServerObjects(local, server, null, new Set(['b']))
+    expect(out.map((o) => !!o.hidden)).toEqual([false, false])
+  })
 })
 
 describe('queueChange', () => {

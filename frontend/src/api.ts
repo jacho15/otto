@@ -1,4 +1,4 @@
-import type { Room, RoomSummary, Vec2 } from './types'
+import type { AddResult, CatalogItem, Room, RoomSummary, Vec2 } from './types'
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response
@@ -29,6 +29,17 @@ export const patchObject = (id: string, name: string, body: { pos?: Vec2; yaw?: 
 
 export const deleteObject = (id: string, name: string) =>
   request<Room>(objectUrl(id, name), { method: 'DELETE' })
+
+export const getCatalog = () => request<CatalogItem[]>('/api/catalog')
+
+export const addObject = (id: string, catalogId: string, replace?: string) =>
+  request<AddResult>(`/api/rooms/${encodeURIComponent(id)}/objects`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ catalog_id: catalogId, replace: replace ?? null }),
+  })
+
+export const catalogFileUrl = (path: string) => `/api/catalog/files/${path.split('/').map(encodeURIComponent).join('/')}`
 
 export const meshUrl = (id: string, mesh: string) => `/files/${encodeURIComponent(id)}/${mesh.split('/').map(encodeURIComponent).join('/')}`
 

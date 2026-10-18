@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import tempfile
 import threading
 from pathlib import Path
@@ -12,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from .fit import find_warnings
+from .place import add_item
 
 app = FastAPI(title="Otto API")
 
@@ -34,8 +36,29 @@ class ObjectPatch(BaseModel):
     yaw: Number | None = None
 
 
+class ObjectAdd(BaseModel):
+    catalog_id: str
+    replace: str | None = None
+
+
+def data_dir() -> Path:
+    return Path(os.environ.get("OTTO_DATA") or DEFAULT_DATA)
+
+
 def rooms_dir() -> Path:
-    return Path(os.environ.get("OTTO_DATA") or DEFAULT_DATA) / "rooms"
+    return data_dir() / "rooms"
+
+
+def catalog_dir() -> Path:
+    return data_dir() / "catalog"
+
+
+def load_catalog() -> list:
+    path = catalog_dir() / "catalog.json"
+    if not path.is_file():
+        return []
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
 
 
 def room_dir(room_id: str) -> Path:
@@ -69,7 +92,7 @@ def save_scene(room_id: str, scene: dict) -> None:
 
 def room_response(room_id: str, scene: dict) -> dict:
     objects = scene["objects"]
-    products = [o["product"] for o in objects if o.get("product")]
+    products = [o["product"] for o in objects if o.get("product") and not o.get("hidden")]
     prices = [p["price"] for p in products if p.get("price") is not None]
     currency = next((p["currency"] for p in products if p.get("currency")), "USD")
     return {
@@ -102,7 +125,7 @@ def list_rooms():
                     "id": d.name,
                     "name": room_name(d.name),
                     "size_xy": scene["room"]["size_xy"],
-                    "object_count": len(scene["objects"]),
+                    "object_count": len([o for o in scene["objects"] if not o.get("hidden")]),
                 })
     return result
 
@@ -118,6 +141,8 @@ def patch_object(room_id: str, name: str, body: ObjectPatch):
     with lock:
         scene = load_scene(room_id)
         obj = find_object(scene, name)
+        if obj.get("hidden"):
+            raise HTTPException(409, "Object is hidden")
         if not obj.get("movable", True):
             raise HTTPException(409, "Object is not movable")
         if body.pos is not None:
@@ -128,20 +153,65 @@ def patch_object(room_id: str, name: str, body: ObjectPatch):
         return room_response(room_id, scene)
 
 
+@app.post("/api/rooms/{room_id}/objects")
+def add_object(room_id: str, body: ObjectAdd):
+    with lock:
+        scene = load_scene(room_id)
+        item = next((i for i in load_catalog() if i["id"] == body.catalog_id), None)
+        if item is None:
+            raise HTTPException(404, "Catalog item not found")
+        if body.replace is not None:
+            target = find_object(scene, body.replace)
+            if target.get("hidden"):
+                raise HTTPException(409, "Object is hidden")
+            if not target.get("movable", True):
+                raise HTTPException(409, "Object is not movable")
+        source = catalog_dir() / item["model"]
+        if not source.is_file():
+            raise HTTPException(404, "Model file not found")
+        mesh = room_dir(room_id) / "meshes" / f"{item['id']}.glb"
+        if not mesh.exists():
+            mesh.parent.mkdir(exist_ok=True)
+            tmp = mesh.with_suffix(".tmp")
+            shutil.copyfile(source, tmp)
+            os.replace(tmp, mesh)
+        scene["objects"], name = add_item(scene["room"], scene["objects"], item, body.replace)
+        save_scene(room_id, scene)
+        return {**room_response(room_id, scene), "added": name}
+
+
 @app.delete("/api/rooms/{room_id}/objects/{name}")
 def delete_object(room_id: str, name: str):
     with lock:
         scene = load_scene(room_id)
         obj = find_object(scene, name)
         scene["objects"].remove(obj)
+        if obj.get("replaces"):
+            for other in scene["objects"]:
+                if other["name"] == obj["replaces"]:
+                    other.pop("hidden", None)
         save_scene(room_id, scene)
         return room_response(room_id, scene)
 
 
-@app.get("/files/{room_id}/{path:path}")
-def get_file(room_id: str, path: str):
-    base = room_dir(room_id).resolve()
+def serve_file(base: Path, path: str):
+    base = base.resolve()
     target = (base / path).resolve()
     if not target.is_relative_to(base) or not target.is_file():
         raise HTTPException(404, "File not found")
     return FileResponse(target)
+
+
+@app.get("/api/catalog")
+def get_catalog():
+    return load_catalog()
+
+
+@app.get("/api/catalog/files/{path:path}")
+def get_catalog_file(path: str):
+    return serve_file(catalog_dir(), path)
+
+
+@app.get("/files/{room_id}/{path:path}")
+def get_file(room_id: str, path: str):
+    return serve_file(room_dir(room_id), path)

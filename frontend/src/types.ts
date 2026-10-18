@@ -18,6 +18,9 @@ export interface RoomObject {
   movable: boolean
   rgba: [number, number, number, number]
   product?: Product
+  hidden?: boolean // a ghost: replaced by another piece, kept so the swap can be undone
+  replaces?: string // name of the piece this one replaced
+  catalog_id?: string
 }
 
 export type Warning =
@@ -38,6 +41,23 @@ export interface Room {
   objects: RoomObject[]
   warnings: Warning[]
   total: { amount: number; currency: string }
+}
+
+export interface AddResult extends Room {
+  added: string
+}
+
+export interface CatalogItem {
+  id: string
+  title: string
+  label: string
+  url: string
+  price: number
+  currency: string
+  size: Vec3 // metres
+  rgba: [number, number, number, number]
+  model: string
+  photo: string
 }
 
 export interface RoomSummary {

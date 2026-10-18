@@ -1,0 +1,62 @@
+[
+  {
+    "id": "klippan-loveseat",
+    "title": "KLIPPAN Loveseat - Bomstad black",
+    "label": "sofa",
+    "url": "https://www.ikea.com/us/en/p/klippan-loveseat-bomstad-black-50399318/",
+    "price": 449.0,
+    "currency": "USD",
+    "size": [1.7685, 0.8795, 0.6604],
+    "rgba": [0.143, 0.144, 0.147, 1.0],
+    "model": "models/klippan-loveseat.glb",
+    "photo": "photos/klippan-loveseat.jpg"
+  },
+  {
+    "id": "ekenaset-armchair",
+    "title": "EKENÄSET Armchair - Kilanda light beige",
+    "label": "armchair",
+    "url": "https://www.ikea.com/us/en/p/ekenaeset-armchair-kilanda-light-beige-30533493/",
+    "price": 199.0,
+    "currency": "USD",
+    "size": [0.6413, 0.7811, 0.7588],
+    "rgba": [0.61, 0.56, 0.526, 1.0],
+    "model": "models/ekenaset-armchair.glb",
+    "photo": "photos/ekenaset-armchair.jpg"
+  },
+  {
+    "id": "kallax-desk",
+    "title": "KALLAX Desk - white",
+    "label": "desk",
+    "url": "https://www.ikea.com/us/en/p/kallax-desk-white-30582445/",
+    "price": 79.99,
+    "currency": "USD",
+    "size": [1.1112, 0.3905, 0.7715],
+    "rgba": [0.824, 0.827, 0.803, 1.0],
+    "model": "models/kallax-desk.glb",
+    "photo": "photos/kallax-desk.jpg"
+  },
+  {
+    "id": "dyvlinge-swivel-chair",
+    "title": "DYVLINGE Swivel chair - Kelinge black",
+    "label": "chair",
+    "url": "https://www.ikea.com/us/en/p/dyvlinge-swivel-chair-kelinge-black-80570831/",
+    "price": 199.0,
+    "currency": "USD",
+    "size": [0.6286, 0.7493, 0.6794],
+    "rgba": [0.211, 0.215, 0.217, 1.0],
+    "model": "models/dyvlinge-swivel-chair.glb",
+    "photo": "photos/dyvlinge-swivel-chair.jpg"
+  },
+  {
+    "id": "ps-lomsk-armchair",
+    "title": "IKEA PS LÖMSK Swivel armchair - white/red",
+    "label": "armchair",
+    "url": "https://www.ikea.com/us/en/p/ikea-ps-loemsk-swivel-armchair-white-red-10407136/",
+    "price": 129.99,
+    "currency": "USD",
+    "size": [0.59055, 0.619, 0.7493],
+    "rgba": [0.85, 0.838, 0.824, 1.0],
+    "model": "models/ps-lomsk-armchair.glb",
+    "photo": "photos/ps-lomsk-armchair.jpg"
+  }
+]
