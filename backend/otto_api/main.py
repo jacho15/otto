@@ -221,6 +221,11 @@ def total_of(objects: list) -> dict:
     return single_total(totals_of(objects))
 
 
+def has_story(room_id: str) -> bool:
+    """Scanned rooms can ship a "How this room was made" page in demo/story.json."""
+    return (room_dir(room_id) / "demo" / "story.json").is_file()
+
+
 def room_response(room_id: str, scene: dict) -> dict:
     objects = scene["objects"]
     return {
@@ -233,6 +238,7 @@ def room_response(room_id: str, scene: dict) -> dict:
         "totals": totals_of(objects),
         "door": scene.get("door") or DEFAULT_DOOR,
         "can_undo": bool(load_list(room_dir(room_id) / "history.json")),
+        "has_story": has_story(room_id),
     }
 
 
@@ -306,6 +312,7 @@ def list_rooms():
                     "kind": kind,
                     "size_xy": scene["room"]["size_xy"],
                     "object_count": len([o for o in scene["objects"] if not o.get("hidden")]),
+                    "has_story": has_story(d.name),
                 })
     return result
 

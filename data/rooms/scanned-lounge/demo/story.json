@@ -145,7 +145,6 @@
   "tracked_frames": 237,
   "points": 1143646,
   "pipeline": {
-    "gpu": "RTX 6000 Ada (48 GB)",
     "minutes": {
       "depth": 10,
       "tracking": 3,
