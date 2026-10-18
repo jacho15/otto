@@ -14,6 +14,7 @@ let draft = null
 let unit = 'cm'
 let busy = false
 let loadCount = 0
+let selectedRoom = null
 
 class ApiError extends Error {
   constructor(status, message) {
@@ -136,16 +137,33 @@ function showPhoto(url) {
   img.src = url
 }
 
+// Rooms are radio buttons, not a <select>: a native dropdown in a Windows extension popup can drop the pick.
+function pickRoom(room) {
+  selectedRoom = room
+  $('put').textContent = room ? `Put in ${room.name}` : 'Put in my room'
+}
+
 function fillRooms(rooms, last) {
-  const select = $('room')
-  select.textContent = ''
+  const box = $('rooms')
+  box.querySelectorAll('label').forEach((l) => l.remove())
+  const start = rooms.find((r) => r.id === last) || rooms[0] || null
   for (const room of rooms) {
-    const option = document.createElement('option')
-    option.value = room.id
-    option.textContent = room.name
-    select.appendChild(option)
+    const label = document.createElement('label')
+    label.className = 'room-choice'
+    const input = document.createElement('input')
+    input.type = 'radio'
+    input.name = 'room'
+    input.value = room.id
+    input.checked = room === start
+    input.addEventListener('change', () => {
+      pickRoom(room)
+      chrome.storage.local.set({ room: room.id })
+    })
+    label.append(input, document.createTextNode(` ${room.name}`))
+    box.appendChild(label)
   }
-  if (rooms.some((r) => r.id === last)) select.value = last
+  box.hidden = rooms.length === 0
+  pickRoom(start)
   $('put').hidden = rooms.length === 0
 }
 
@@ -220,7 +238,7 @@ async function submit(place) {
   } catch (e) {
     return setStatus(e.message, 'error')
   }
-  const room = $('room').value
+  const room = selectedRoom && selectedRoom.id
   if (place && !room) return setStatus('Pick a room first.', 'error')
   setBusy(true)
   try {
@@ -236,7 +254,7 @@ async function submit(place) {
       const added = await api(`/api/rooms/${encodeURIComponent(room)}/objects`, { catalog_id: created.id })
       const link = `${settings.web}/rooms/${encodeURIComponent(room)}?select=${encodeURIComponent(added.added)}`
       await chrome.tabs.create({ url: link })
-      setStatus('Added to your room.', 'ok')
+      setStatus(`Added to ${selectedRoom.name}.`, 'ok')
     } catch (e) {
       setStatus(`Saved to your items, but couldn't add it to the room. ${e.message}`, 'error')
     }
@@ -310,7 +328,6 @@ async function init() {
   for (const button of document.querySelectorAll('.unit')) {
     button.addEventListener('click', () => setUnit(button.dataset.unit))
   }
-  $('room').addEventListener('change', () => chrome.storage.local.set({ room: $('room').value }))
   $('form').addEventListener('submit', (e) => {
     e.preventDefault()
     submit(true)

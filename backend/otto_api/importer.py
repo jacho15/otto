@@ -29,10 +29,17 @@ LABELS = (
 # Every part is bounded, so a page of digits or spaces cannot make a pattern slow.
 NUM = r"(?<!\d)(?:\d{1,4}(?:\.\d{1,3})?(?:[ \t]{1,3}\d{1,2}/\d{1,2})?|\d{1,2}/\d{1,2})"
 UNIT = r"""(?:"|”|″|''|in(?:ch(?:es)?)?\b\.?|cm\b)"""
+# "Height including back cushions 30 3/8"" still counts as the overall height.
+INCLUDING = r"(?:[ \t]{1,3}(?:including|incl\.?|with)(?:[ \t]{1,3}[a-z]{1,15}){1,3})?"
 LABELED = {
-    key: re.compile(rf"\b{key}\b[ \t:]{{0,4}}({NUM})[ \t]{{0,3}}({UNIT})", re.I)
+    key: re.compile(rf"\b{key}\b{INCLUDING}[ \t:]{{0,4}}({NUM})[ \t]{{0,3}}({UNIT})", re.I)
     for key in ("width", "depth", "height", "length", "diameter")
 }
+# A part's size ("Seat height", "Armrest width"), not the whole piece's.
+PART = re.compile(
+    r"\b(?:seat|armrest|arm|backrest|back|leg|shelf|drawer|inner|interior|opening|cushion|frame|mattress|package|box)[ \t]{1,3}$",
+    re.I,
+)
 SEP = r"[ \t]{0,3}"
 COMBINED = re.compile(
     rf"({NUM}){SEP}(?:{UNIT})?{SEP}[x×]{SEP}({NUM}){SEP}(?:{UNIT})?{SEP}[x×]{SEP}({NUM}){SEP}({UNIT})", re.I
@@ -177,9 +184,10 @@ def read_size(text: str):
     text = clean(text)[:MAX_TEXT]
     found = {}
     for key, pattern in LABELED.items():
-        match = pattern.search(text)
-        if match:
-            found[key] = to_metres(*match.groups())
+        for match in pattern.finditer(text):
+            if not PART.search(text[max(0, match.start() - 20):match.start()]):
+                found[key] = to_metres(*match.groups())
+                break
     width = found.get("width", found.get("length", found.get("diameter")))
     depth = found.get("depth", found.get("diameter"))
     height = found.get("height")

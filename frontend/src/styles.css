@@ -253,22 +253,20 @@ a {
 
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 3px;
   min-width: 0;
 }
 
 .tabs button {
-  flex: 1 1 0;
-  min-width: 0;
+  flex: 1 1 auto;
   background: none;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 8px 0;
+  padding: 8px 6px;
   font: inherit;
   font-size: 12px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   color: var(--muted);
   cursor: pointer;
 }

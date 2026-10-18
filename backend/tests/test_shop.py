@@ -2,7 +2,7 @@ import json
 
 from conftest import CATALOG, ROOM
 from otto_api.main import catalog_dir, load_catalog
-from otto_api.fit import footprint_corners, outside_walls
+from otto_api.fit import footprint_corners, footprints_overlap, outside_walls
 from otto_api.place import add_item
 
 URL = f"/api/rooms/{ROOM}/objects"
@@ -66,10 +66,13 @@ def test_add_lands_inside_walls_without_overlap(client, data_dir):
     assert find(saved(data_dir)["objects"], "big_table") == obj
 
 
-def test_add_takes_free_centre(client):
-    obj = find(client.post(URL, json={"catalog_id": "small-chair"}).json()["objects"], "small_chair")
-    assert obj["pos"] == [0.0, 0.0, 0.0]
-    assert obj["yaw"] == 0.0
+def test_add_keeps_a_walkway_to_other_pieces(client):
+    body = client.post(URL, json={"catalog_id": "small-chair"}).json()
+    obj = find(body["objects"], "small_chair")
+    padded = footprint_corners(obj["pos"], (obj["size"][0] + 1.2, obj["size"][1] + 1.2), obj["yaw"])
+    others = [o for o in body["objects"] if o["name"] != "small_chair" and not o.get("hidden")]
+    assert body["warnings"] == []
+    assert not any(footprints_overlap(padded, footprint_corners(o["pos"], o["size"], o["yaw"])) for o in others)
 
 
 def test_add_name_suffix(client):
@@ -216,6 +219,32 @@ def test_place_tries_quarter_turn():
     corners = footprint_corners(new["pos"], new["size"], new["yaw"])
     assert new["yaw"] != 0.0
     assert not outside_walls(corners, room["size_xy"])
+
+
+def gap_between(a, b):
+    """Smallest axis gap between two unrotated footprints (negative if they overlap)."""
+    (ax, ay), (bx, by) = a["pos"][:2], b["pos"][:2]
+    gx = abs(ax - bx) - (a["size"][0] + b["size"][0]) / 2
+    gy = abs(ay - by) - (a["size"][1] + b["size"][1]) / 2
+    return max(gx, gy)
+
+
+def test_place_keeps_a_walkway_when_there_is_room():
+    room = {"size_xy": [6.0, 6.0]}
+    sofa = {"name": "sofa", "pos": [0.0, 0.0, 0.0], "yaw": 0.0, "size": [2.0, 0.9, 0.8]}
+    new = add_item(room, [sofa], CATALOG[0])[0][-1]
+    assert gap_between(new, sofa) >= 0.6 - 1e-9
+
+
+def test_place_squeezes_in_when_a_walkway_does_not_fit():
+    # 0.5 m of floor is left beside the blocker: too little for a walkway, enough for the piece.
+    room = {"size_xy": [2.0, 1.0]}
+    blocker = {"name": "b", "pos": [-0.25, 0.0, 0.0], "yaw": 0.0, "size": [1.5, 1.0, 1.0]}
+    item = {**CATALOG[0], "size": [0.4, 0.4, 0.5]}
+    new = add_item(room, [blocker], item)[0][-1]
+    corners = footprint_corners(new["pos"], new["size"], new["yaw"])
+    assert not outside_walls(corners, room["size_xy"])
+    assert gap_between(new, blocker) >= -1e-9
 
 
 def test_add_at_exact_pose(client, data_dir):

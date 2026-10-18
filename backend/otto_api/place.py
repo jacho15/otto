@@ -5,11 +5,18 @@ from .fit import footprint_corners, footprints_overlap, outside_walls
 
 STEP = 0.05  # 5 cm grid
 YAWS = (0.0, math.pi / 2)
+CLEARANCES = (0.6, 0.3, 0.0)  # metres kept free around a new piece: a walkway first, then less
+
+
+def bounds(corners):
+    xs, ys = [c[0] for c in corners], [c[1] for c in corners]
+    return min(xs), max(xs), min(ys), max(ys)
 
 
 def free_spot(room, objects, size):
     """Nearest (x, y, yaw) to the room centre inside the walls with no overlap.
 
+    Prefers a spot with a 60 cm walkway to other pieces, then 30 cm, then any free spot.
     Falls back to the centre with yaw 0 if nothing is free.
     """
     hx, hy = room["size_xy"][0] / 2, room["size_xy"][1] / 2
@@ -18,18 +25,24 @@ def free_spot(room, objects, size):
         ((i * STEP, j * STEP) for i in range(-nx, nx + 1) for j in range(-ny, ny + 1)),
         key=lambda p: (math.hypot(*p), p),
     )
-    others = [
-        footprint_corners(o["pos"], o["size"], o["yaw"])
-        for o in objects
-        if not o.get("hidden")
-    ]
-    for x, y in spots:
-        for yaw in YAWS:
-            corners = footprint_corners((x, y), size, yaw)
-            if outside_walls(corners, room["size_xy"]):
-                continue
-            if not any(footprints_overlap(corners, c) for c in others):
-                return x, y, yaw
+    others = []
+    for o in objects:
+        if not o.get("hidden"):
+            c = footprint_corners(o["pos"], o["size"], o["yaw"])
+            others.append((bounds(c), c))
+    for gap in CLEARANCES:
+        padded = (size[0] + 2 * gap, size[1] + 2 * gap, size[2])
+        for x, y in spots:
+            for yaw in YAWS:
+                if outside_walls(footprint_corners((x, y), size, yaw), room["size_xy"]):
+                    continue
+                corners = footprint_corners((x, y), padded, yaw)
+                x0, x1, y0, y1 = bounds(corners)
+                if not any(
+                    ox0 < x1 and x0 < ox1 and oy0 < y1 and y0 < oy1 and footprints_overlap(corners, c)
+                    for (ox0, ox1, oy0, oy1), c in others
+                ):
+                    return x, y, yaw
     return 0.0, 0.0, 0.0
 
 

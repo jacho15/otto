@@ -151,6 +151,16 @@ def test_diameter_sets_width_and_depth():
     assert size == pytest.approx([0.749, 0.749, 0.406], abs=1e-3)
 
 
+def test_part_sizes_are_skipped():
+    # The order and wording of a real IKEA loveseat page: part sizes come before the overall ones.
+    text = (
+        '<p>Armrest height 18 1/2 " Armrest width 4 3/4 " Depth 31 1/8 " Seat height 16 7/8 "'
+        ' Seat width 46 1/2 " Width 57 7/8 " Height including back cushions 30 3/8 "'
+        ' Seat depth 20 1/2 " Backrest height 26 " Height under furniture 5 1/2 "</p>'
+    )
+    assert sized(text) == pytest.approx([1.470, 0.791, 0.772], abs=1e-3)
+
+
 def test_combined_inches():
     assert sized('<p>Size: 31 1/2x11x79 1/2"</p>') == pytest.approx([0.800, 0.279, 2.019], abs=1e-3)
 
