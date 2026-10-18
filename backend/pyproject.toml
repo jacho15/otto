@@ -8,6 +8,7 @@ dependencies = [
     "fastapi",
     "filelock>=3.16,<4",
     "httpx>=0.28.1",
+    "playwright>=1.64.0",
     "python-dotenv>=1.2.4",
     "python-multipart>=0.0.32",
     "uvicorn",

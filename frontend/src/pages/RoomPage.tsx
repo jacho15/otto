@@ -29,7 +29,12 @@ const STEP = (15 * Math.PI) / 180
 
 export default function RoomPage() {
   const { id = '' } = useParams()
-  const wantedSelect = useSearchParams()[0].get('select')
+  const [params] = useSearchParams()
+  const wantedSelect = params.get('select')
+  // ?capture=1: only the 3D view, for server-side pictures of the room
+  const capture = params.get('capture') === '1'
+  // ?tour=<piece>: walk the camera around that piece, for a video of the room
+  const tour = capture ? (params.get('tour') ?? undefined) : undefined
   const [room, setRoom] = useState<Room | null>(null)
   const [objects, setObjects] = useState<RoomObject[]>([])
   const [selected, setSelected] = useState<string | null>(null)
@@ -386,7 +391,7 @@ export default function RoomPage() {
   if (!room) return <div className="center-note muted">Loading room…</div>
 
   return (
-    <div className="room-page">
+    <div className={`room-page${capture ? ' capture' : ''}`}>
       <div
         className="viewport"
         onDragEnter={(e) => {
@@ -416,6 +421,7 @@ export default function RoomPage() {
           onDragStart={onDragStart}
           onDrag={onDrag}
           onDragEnd={onDragEnd}
+          tour={tour}
         />
         {dropping && <div className="drop-overlay">Drop a link, photo or 3D file (.glb, .obj, .stl, .ply) to add it</div>}
       </div>

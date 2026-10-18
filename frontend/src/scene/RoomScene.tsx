@@ -42,6 +42,7 @@ import {
   threeToRoom,
   wallGaps,
 } from '../geometry'
+import { TOUR_MS, tourPose } from './tourPath'
 import type { Room, RoomObject, Vec2, Vec3 } from '../types'
 import { fitTransform } from './fitModel'
 import { makeFloorTexture } from './floorTexture'
@@ -74,6 +75,8 @@ interface Props {
   onDragStart: (name: string) => void
   onDrag: (name: string, pos: Vec2) => void
   onDragEnd: (name: string, pos: Vec2 | null) => void
+  /** Capture mode: walk the camera around this piece for a video, instead of free orbiting. */
+  tour?: string
 }
 
 interface Drag {
@@ -179,7 +182,7 @@ export default function RoomScene(props: Props) {
           <PerspectiveCamera
             makeDefault
             position={[span * 0.8, span * 1.0, span * 1.1]}
-            fov={45}
+            fov={props.tour ? 62 : 45}
             near={0.05}
             far={100}
           />
@@ -278,6 +281,9 @@ export default function RoomScene(props: Props) {
 
         <CaptureBridge capture={capture} composer={composer} filename={`otto-${room.id}.png`} />
         <DragController drag={drag} snapPos={snapPos} onDrag={props.onDrag} onDragEnd={props.onDragEnd} />
+        {props.tour ? (
+          <TourCamera room={room} piece={objects.find((o) => o.name === props.tour && !o.hidden)} />
+        ) : (
         <OrbitControls
           key={view}
           makeDefault
@@ -289,6 +295,8 @@ export default function RoomScene(props: Props) {
           minDistance={1}
           maxDistance={span * 4}
         />
+        )}
+      <ReadyFlag />
       </Canvas>
       <div className="scene-toolbar">
         <button className={view === 'persp' ? 'on' : ''} onClick={() => setView('persp')}>3D view</button>
@@ -359,6 +367,51 @@ function CaptureBridge({
       capture.current = null
     }
   }, [gl, scene, camera, capture, composer, filename])
+  return null
+}
+
+/**
+ * Tour mode: holds the first pose until the page calls window.__ottoStartTour(), then walks the path
+ * and marks the page with data-tour-done, so a recording can cut exactly the walk.
+ */
+function TourCamera({ room, piece }: { room: Room; piece: RoomObject | undefined }) {
+  const start = useRef<number | null>(null)
+  useEffect(() => {
+    const w = window as unknown as { __ottoStartTour?: () => void }
+    w.__ottoStartTour = () => {
+      start.current = performance.now()
+    }
+    return () => {
+      delete w.__ottoStartTour
+      delete document.documentElement.dataset.tourDone
+    }
+  }, [])
+  useFrame(({ camera }) => {
+    if (!piece) return
+    const t = start.current === null ? 0 : (performance.now() - start.current) / TOUR_MS
+    const { position, target } = tourPose(t, room.room.size_xy, piece.pos, piece.size)
+    camera.position.set(...position)
+    camera.lookAt(...target)
+    if (t >= 1) document.documentElement.dataset.tourDone = '1'
+  })
+  return null
+}
+
+/** Marks the page once every model has loaded and a few frames have drawn, so a screenshot can wait for it. */
+function ReadyFlag() {
+  const { active, loaded, total } = useProgress()
+  const frames = useRef(0)
+  useFrame(() => {
+    if (active || loaded < total) {
+      frames.current = 0
+      return
+    }
+    frames.current += 1
+    if (frames.current === 30) document.documentElement.dataset.sceneReady = '1'
+  })
+  useEffect(() => () => {
+    delete document.documentElement.dataset.sceneReady
+  }, [])
   return null
 }
 

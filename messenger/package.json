@@ -1,0 +1,23 @@
+{
+  "name": "otto-messenger",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Text otto a furniture photo: closest matches back, then see one in your room. Runs on Photon Spectrum.",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "profile": "tsx src/profile.ts"
+  },
+  "dependencies": {
+    "@photon-ai/api": "^0.5.0",
+    "spectrum-ts": "^12.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.12"
+  }
+}

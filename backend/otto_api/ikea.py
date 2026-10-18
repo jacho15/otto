@@ -121,13 +121,13 @@ def product_url(url: str) -> bool:
     return ikea_host(url) and "/us/en/p/" in urlsplit(url).path.lower()
 
 
-def ask(client, messages, timeout):
+def ask(client, messages, timeout, system=SYSTEM):
     try:
         return client.with_options(max_retries=0).beta.messages.create(
             timeout=timeout,
             model=MODEL,
             max_tokens=MAX_TOKENS,
-            system=SYSTEM,
+            system=system,
             tools=[WEB_SEARCH, REPORT],
             messages=messages,
             thinking={"type": "adaptive"},
@@ -184,8 +184,9 @@ def merged(found, urls) -> list[dict]:
     return products
 
 
-def find_products(client, prompt) -> list[dict]:
+def find_products(client, prompt, system=SYSTEM) -> list[dict]:
     """[{"url", "why"}] from Claude's IKEA search, in about SEARCH_BUDGET seconds for all calls.
+    `system` sets what "similar" means; the default looks for cheaper alternatives.
     The reported products come first, then product pages from the search results.
     Raise AgentError if the call fails or nothing was found in time."""
     deadline = time.monotonic() + SEARCH_BUDGET
@@ -197,7 +198,7 @@ def find_products(client, prompt) -> list[dict]:
             if urls:
                 return merged([], urls)
             raise AgentError("The IKEA search took too long. Try again.")
-        message = ask(client, messages, left)
+        message = ask(client, messages, left) if system is SYSTEM else ask(client, messages, left, system)
         if message.stop_reason == "refusal":
             raise AgentError("The model declined this request.")
         if message.stop_reason == "max_tokens":
