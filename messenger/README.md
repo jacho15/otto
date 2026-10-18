@@ -29,6 +29,12 @@ Photon_FULL_API_KEY=pho_sk_...
 (`PHOTON_PROJECT_ID` / `PHOTON_API_KEY` work too.) Then text the project's iMessage line from the phone
 number assigned to it.
 
+To give the line otto's name and picture ("Otto Your personal interior agent", with `assets/otto-avatar.png`):
+
+```sh
+npm run profile
+```
+
 Optional settings, also in `.env`:
 
 - `OTTO_TERMINAL=off`: skip the terminal chat window, so iMessage activity and errors print plainly
