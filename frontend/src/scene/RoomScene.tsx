@@ -214,6 +214,9 @@ export default function RoomScene(props: Props) {
         </Environment>
 
         <Floor W={W} D={D} wood={high} onClick={() => onSelect(null)} />
+        {/* The post-processing composer turns the renderer's auto-clear off, and ContactShadows relies on it to wipe
+            its target each frame; without it old shadows stay behind when a piece moves. So clear just around it. */}
+        <AutoClear on />
         {/* Always mounted: drei does not free its render targets on unmount. Hidden and paused in Low quality.
             Its camera starts 3 cm up so the floor, grid and outlines drawn on it stay out of the shadow. */}
         <ContactShadows
@@ -228,6 +231,7 @@ export default function RoomScene(props: Props) {
           opacity={0.55}
           resolution={1024}
         />
+        <AutoClear on={false} />
         <FloorGrid W={W} D={D} />
         <Walls W={W} D={D} H={room.room.ceiling_height} t={room.room.wall_thickness} />
 
@@ -316,6 +320,22 @@ export default function RoomScene(props: Props) {
 }
 
 /** The floor: light wood planks, or one plain colour in Low quality. */
+/** Per frame: `on` remembers the renderer's auto-clear and turns it on; `on={false}` puts it back. Same priority as
+ * ContactShadows' frame callback, so mounting order puts them right before and after it. */
+const savedAutoClear = { value: true }
+function AutoClear({ on }: { on: boolean }) {
+  const gl = useThree((s) => s.gl)
+  useFrame(() => {
+    if (on) {
+      savedAutoClear.value = gl.autoClear
+      gl.autoClear = true
+    } else {
+      gl.autoClear = savedAutoClear.value
+    }
+  })
+  return null
+}
+
 function Floor({ W, D, wood, onClick }: { W: number; D: number; wood: boolean; onClick: () => void }) {
   const gl = useThree((s) => s.gl)
   const texture = useMemo(
