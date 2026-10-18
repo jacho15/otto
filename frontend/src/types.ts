@@ -28,6 +28,7 @@ export interface RoomShape {
   size_xy: Vec2
   ceiling_height: number
   wall_thickness: number
+  point_cloud?: string // .ply path relative to the room folder, from a scan
 }
 
 export interface Room {
