@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { addObject, formatPrice, getRoom, listOrders, restoreLayout, saveLayout, undoRoom } from '../api'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { addObject, formatPrice, getRoom, listCustomItems, listOrders, restoreLayout, saveLayout, undoRoom } from '../api'
 import { errorText, orderedNames } from '../checkoutLogic'
+import { dropIntent, type DropIntent } from '../furnitureLogic'
 import { findWarnings, warnedNames } from '../geometry'
 import RoomScene from '../scene/RoomScene'
 import { mergeServerObjects } from '../saveLogic'
 import { acceptError, previewObject } from '../suggestLogic'
-import type { Layout, Order, Room, RoomObject, Suggestion, Vec2 } from '../types'
+import type { CustomItem, Layout, Order, Room, RoomObject, Suggestion, Vec2 } from '../types'
 import { useSaveQueue } from '../useSaveQueue'
+import AddFurniture from './AddFurniture'
 import Alternatives from './Alternatives'
 import Checkout from './Checkout'
 import DesignPanel from './DesignPanel'
@@ -17,11 +19,13 @@ import Layouts from './Layouts'
 import RoomSize from './RoomSize'
 import Shop from './Shop'
 import Suggestions from './Suggestions'
+import YourItems from './YourItems'
 
 const STEP = (15 * Math.PI) / 180
 
 export default function RoomPage() {
   const { id = '' } = useParams()
+  const wantedSelect = useSearchParams()[0].get('select')
   const [room, setRoom] = useState<Room | null>(null)
   const [objects, setObjects] = useState<RoomObject[]>([])
   const [selected, setSelected] = useState<string | null>(null)
@@ -32,9 +36,14 @@ export default function RoomPage() {
   const [adding, setAdding] = useState(false)
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [orders, setOrders] = useState<Order[]>([])
+  const [customItems, setCustomItems] = useState<CustomItem[]>([])
+  const [dropping, setDropping] = useState(false) // something is being dragged over the 3D view
+  const [drop, setDrop] = useState<(DropIntent & { id: number }) | null>(null)
   const [designRunning, setDesignRunning] = useState(false) // the design agent saves on the server outside the save queue
   const [serverVersion, setServerVersion] = useState(0) // bumped whenever a server response is applied
   const draggingRef = useRef<string | null>(null)
+  const dragDepth = useRef(0)
+  const dropCount = useRef(0)
   const resyncAfterDrag = useRef(false)
   const addingRef = useRef(false)
   const undoingRef = useRef(false)
@@ -53,9 +62,21 @@ export default function RoomPage() {
     )
   }, [id])
 
+  // A link with ?select=<name> (from the browser extension) selects that piece once, after the room loads.
+  const selectedFromUrl = useRef(false)
+  useEffect(() => {
+    if (!wantedSelect || !room || selectedFromUrl.current) return
+    selectedFromUrl.current = true
+    if (objects.some((o) => o.name === wantedSelect && !o.hidden)) setSelected(wantedSelect)
+  }, [wantedSelect, room, objects])
+
   useEffect(() => {
     listOrders(id).then(setOrders, () => {})
   }, [id])
+
+  useEffect(() => {
+    listCustomItems().then(setCustomItems, () => {})
+  }, [])
 
   // Responses to saves and adds leave the room alone except for whether there is something to undo.
   const syncUndo = useCallback((r: Room) => {
@@ -241,6 +262,22 @@ export default function RoomPage() {
     [save, resync],
   )
 
+  // A link, photo or .glb file dropped on the 3D view opens the Add card in the Shop tab.
+  const canDrop = (e: DragEvent) => ['Files', 'text/uri-list', 'text/plain'].some((t) => e.dataTransfer?.types.includes(t))
+
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault()
+    dragDepth.current = 0
+    setDropping(false)
+    const data = e.dataTransfer
+    if (!data) return
+    const intent = dropIntent(Array.from(data.files), data.getData('text/uri-list'), data.getData('text/plain'))
+    if (!intent) return setSaveError('Drop a link, a photo (JPEG, PNG or WebP) or a .glb file.')
+    setSaveError(null)
+    setDrop({ ...intent, id: ++dropCount.current })
+    setTab('shop')
+  }
+
   const canUndo = !!room?.can_undo
 
   useEffect(() => {
@@ -304,7 +341,24 @@ export default function RoomPage() {
 
   return (
     <div className="room-page">
-      <div className="viewport">
+      <div
+        className="viewport"
+        onDragEnter={(e) => {
+          if (!canDrop(e)) return
+          dragDepth.current++
+          setDropping(true)
+        }}
+        onDragOver={(e) => {
+          if (!canDrop(e)) return
+          e.preventDefault()
+          e.dataTransfer.dropEffect = 'copy'
+        }}
+        onDragLeave={() => {
+          dragDepth.current = Math.max(0, dragDepth.current - 1)
+          if (dragDepth.current === 0) setDropping(false)
+        }}
+        onDrop={onDrop}
+      >
         <RoomScene
           room={room}
           objects={objects}
@@ -317,6 +371,7 @@ export default function RoomPage() {
           onDrag={onDrag}
           onDragEnd={onDragEnd}
         />
+        {dropping && <div className="drop-overlay">Drop a link, photo or .glb file to add it</div>}
       </div>
       <aside className="panel">
         <Link to="/" className="wordmark">otto</Link>
@@ -368,6 +423,17 @@ export default function RoomPage() {
             onAccept={acceptSuggestion}
             onSkip={skipSuggestion}
           />
+        </div>
+        <div hidden={tab !== 'shop'}>
+          <div className="checkout">
+            <AddFurniture
+              busy={adding}
+              intent={drop}
+              onSaved={(item) => setCustomItems((list) => [item, ...list.filter((x) => x.id !== item.id)])}
+              onAdd={addPiece}
+            />
+            <YourItems items={customItems} busy={adding} onAdd={addPiece} onItems={setCustomItems} />
+          </div>
         </div>
         {tab === 'shop' ? (
           <Shop room={room.room} door={room.door} objects={objects} target={replaceTarget} busy={adding} onAdd={addPiece} />

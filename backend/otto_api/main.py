@@ -12,6 +12,7 @@ from typing import Annotated
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 
@@ -19,6 +20,8 @@ from .agent import AgentError, make_client, run_checkout
 from .checkout import MockVisaProvider, approval_violations
 from .fit import find_warnings
 from .alternatives import router as alternatives_router
+from .custom import router as custom_router
+from .extension_api import router as extension_router
 from .place import add_at, add_item
 from .places import router as places_router
 from .suggest import router as suggest_router
@@ -30,6 +33,15 @@ app = FastAPI(title="Otto API")
 app.include_router(places_router)
 app.include_router(suggest_router)
 app.include_router(alternatives_router)
+app.include_router(custom_router)
+app.include_router(extension_router)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"^chrome-extension://[a-p]{32}$",
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+    allow_credentials=False,
+)
 
 
 @app.exception_handler(RequestValidationError)
@@ -117,6 +129,16 @@ def load_catalog() -> list:
         return []
     with open(path, encoding="utf-8") as f:
         return json.load(f)
+
+
+def custom_dir() -> Path:
+    return data_dir() / "custom"
+
+
+def find_item(item_id: str) -> dict | None:
+    """A catalog item by id, else a custom item."""
+    items = load_catalog() + load_list(custom_dir() / "items.json")
+    return next((i for i in items if i["id"] == item_id), None)
 
 
 def room_dir(room_id: str) -> Path:
@@ -397,7 +419,7 @@ def patch_object(room_id: str, name: str, body: ObjectPatch):
 def add_object(room_id: str, body: ObjectAdd):
     with lock:
         scene = load_scene(room_id)
-        item = next((i for i in load_catalog() if i["id"] == body.catalog_id), None)
+        item = find_item(body.catalog_id)
         if item is None:
             raise HTTPException(404, "Catalog item not found")
         if body.replace is not None:
@@ -531,12 +553,25 @@ def agent_checkout(room_id: str, body: CheckoutBody):
         raise HTTPException(502, str(e))
 
 
+MEDIA_TYPES = {
+    ".glb": "model/gltf-binary",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".json": "application/json",
+}
+FILE_HEADERS = {"X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'"}
+
+
 def serve_file(base: Path, path: str):
     base = base.resolve()
     target = (base / path).resolve()
     if not target.is_relative_to(base) or not target.is_file():
         raise HTTPException(404, "File not found")
-    return FileResponse(target)
+    # A fixed type per extension, never a guess, so the browser can't be talked into running a file.
+    media_type = MEDIA_TYPES.get(target.suffix.lower(), "application/octet-stream")
+    return FileResponse(target, media_type=media_type, headers=FILE_HEADERS)
 
 
 @app.get("/api/catalog")

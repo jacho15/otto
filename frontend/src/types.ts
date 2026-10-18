@@ -22,6 +22,7 @@ export interface RoomObject {
   hidden?: boolean // a ghost: replaced by another piece, kept so the swap can be undone
   replaces?: string // name of the piece this one replaced
   catalog_id?: string
+  normalize?: boolean // an uploaded model: fit it to `size` (y-up, any units)
 }
 
 export type Warning =
@@ -193,4 +194,48 @@ export interface AlternativesResult {
 export interface SuggestResult {
   message: string
   suggestions: Suggestion[]
+}
+
+/** What reading a product link found. Anything missing is null; `notes` says what the user should check. */
+export interface LinkDraft {
+  title: string
+  price: number | null
+  currency: string | null
+  url: string
+  image_url: string | null
+  size: Vec3 | null // metres
+  label: string
+  notes: string[]
+}
+
+export interface UploadResult {
+  url: string
+  kind: 'image' | 'model'
+}
+
+export interface CustomItem {
+  id: string
+  title: string
+  url: string
+  price: number | null
+  currency: string
+  size: Vec3 // metres
+  label: string
+  rgba: [number, number, number, number]
+  model: string | null
+  photo: string | null
+  custom: true
+  created_at: string
+}
+
+export interface NewCustomItem {
+  title: string
+  url?: string
+  price?: number | null
+  currency: string
+  size: Vec3 // metres
+  label: string
+  photo?: string
+  model?: string
+  image_url?: string
 }

@@ -107,6 +107,21 @@ def test_invalid_items_are_rejected_and_valid_ones_kept(suggest, data_dir):
     assert scene_text(data_dir) == before
 
 
+def test_custom_items_are_not_suggested(suggest, client):
+    item = client.post("/api/custom-items", json={"title": "Mine", "size": [0.5, 0.5, 0.8], "label": "chair"}).json()
+    mine = {**CHAIR, "catalog_id": item["id"]}
+    api = FakeApi([
+        [call("find_spots", catalog_id=item["id"], near=None, against_wall=False)],
+        [call("propose_suggestions", items=[mine])],
+        [text("Done.")],
+    ])
+    r = suggest(api)
+    assert api.tool_results(1)[0]["is_error"] is True
+    assert f"Unknown catalog id {item['id']}. Use ids from get_catalog." in api.result_text(1)
+    assert f"unknown catalog id {item['id']}" in api.result_text(2)
+    assert r.json()["suggestions"] == []
+
+
 def test_repeated_catalog_id_is_rejected(suggest):
     api = FakeApi([[call("propose_suggestions", items=[CHAIR, {**CHAIR, "x": -1.0, "y": 1.5}])], [text("Done.")]])
     r = suggest(api)

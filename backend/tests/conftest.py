@@ -1,8 +1,12 @@
 import json
+import socket
+from types import SimpleNamespace
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from otto_api import fetch
 from otto_api.main import app
 
 ROOM = "test-room"
@@ -88,3 +92,27 @@ def no_api_key(monkeypatch):
 @pytest.fixture
 def client(data_dir):
     return TestClient(app)
+
+
+@pytest.fixture
+def net(monkeypatch):
+    """No real network. Host names resolve through net.hosts (an IP literal resolves to itself)
+    and every request goes to net.handler(request) and is kept in net.calls."""
+    state = SimpleNamespace(
+        hosts={"example.com": "93.184.216.34", "shop.test": "93.184.216.35"},
+        handler=lambda request: httpx.Response(404),
+        calls=[],
+    )
+
+    def getaddrinfo(host, port, *args, **kwargs):
+        ip = state.hosts.get(host, host)
+        family = socket.AF_INET6 if ":" in ip else socket.AF_INET
+        return [(family, socket.SOCK_STREAM, 6, "", (ip, port))]
+
+    def handler(request):
+        state.calls.append(request)
+        return state.handler(request)
+
+    monkeypatch.setattr(fetch.socket, "getaddrinfo", getaddrinfo)
+    monkeypatch.setattr(fetch, "open_client", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
+    return state

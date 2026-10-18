@@ -2,16 +2,20 @@ import type {
   AddResult,
   AlternativesResult,
   CatalogItem,
+  CustomItem,
   DesignResult,
   Layout,
+  LinkDraft,
   Mandate,
   MandateInput,
+  NewCustomItem,
   NewRoomInput,
   Order,
   Room,
   RoomSummary,
   SavedItem,
   SuggestResult,
+  UploadResult,
   Vec2,
 } from './types'
 
@@ -145,13 +149,37 @@ export const agentSuggest = (id: string, instruction: string) =>
     ...json({ instruction }),
   })
 
-export const catalogFileUrl = (path: string) => `/api/catalog/files/${path.split('/').map(encodeURIComponent).join('/')}`
+/** Read a product page. The server answers 400 (blocked or bad link), 502 (page unreadable) or 422 (nothing found). */
+export const importLink = (url: string) => request<LinkDraft>('/api/import/link', { method: 'POST', ...json({ url }) })
+
+/** Upload a photo (JPEG, PNG or WebP, up to 5 MB) or a .glb model (up to 25 MB). */
+export const uploadFile = (file: File) => {
+  const body = new FormData()
+  body.append('file', file)
+  return request<UploadResult>('/api/uploads', { method: 'POST', body })
+}
+
+export const listCustomItems = () => request<CustomItem[]>('/api/custom-items')
+
+export const createCustomItem = (item: NewCustomItem) =>
+  request<CustomItem>('/api/custom-items', { method: 'POST', ...json(item) })
+
+export const deleteCustomItem = (id: string) =>
+  request<CustomItem[]>(`/api/custom-items/${encodeURIComponent(id)}`, { method: 'DELETE' })
+
+/** A path the server already made absolute (an upload) is used as it is. */
+const isApiPath = (path: string) => path.startsWith('/api/')
+
+export const catalogFileUrl = (path: string) =>
+  isApiPath(path) ? path : `/api/catalog/files/${path.split('/').map(encodeURIComponent).join('/')}`
 
 /** A catalog piece's model lives with the catalog; any other mesh lives in the room folder. */
 export const meshUrl = (id: string, mesh: string) =>
-  mesh.startsWith('catalog/')
-    ? catalogFileUrl(mesh.slice('catalog/'.length))
-    : `/files/${encodeURIComponent(id)}/${mesh.split('/').map(encodeURIComponent).join('/')}`
+  isApiPath(mesh)
+    ? mesh
+    : mesh.startsWith('catalog/')
+      ? catalogFileUrl(mesh.slice('catalog/'.length))
+      : `/files/${encodeURIComponent(id)}/${mesh.split('/').map(encodeURIComponent).join('/')}`
 
 export function formatPrice(amount: number, currency = 'USD') {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)

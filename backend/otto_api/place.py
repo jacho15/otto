@@ -57,13 +57,17 @@ def unique_name(catalog_id, objects):
 
 
 def catalog_object(item, name, pos, yaw):
-    """A room object for a catalog item. An item with no model gets a stand-in box of its label."""
+    """A room object for a catalog item. An item with no model gets a stand-in box of its label.
+
+    A custom item's model is an /api/... URL of any size, so it is scaled to the item size."""
+    custom = item.get("custom")
+    mesh = item["model"] if custom else f"catalog/{item['model']}" if item["model"] else None
     obj = {
         "name": name,
         "label": item["label"],
         "source": "catalog",
         "catalog_id": item["id"],
-        "mesh": f"catalog/{item['model']}" if item["model"] else None,
+        "mesh": mesh,
         "pos": [pos[0], pos[1], 0.0],
         "yaw": yaw,
         "size": item["size"],
@@ -76,6 +80,8 @@ def catalog_object(item, name, pos, yaw):
             "currency": item["currency"],
         },
     }
+    if custom and item["model"]:
+        obj["normalize"] = True
     if not item["model"]:
         obj["shape"] = item.get("shape", item["label"])
     return obj

@@ -27,33 +27,37 @@ Website work only. The video-to-room pipeline is being built on a separate branc
 - [ ] Saved products (wishlist) shared across all rooms
 
 ## 2. Add any furniture
-- [ ] Paste a product link: read name, price, photos and size from the page on the server (JSON-LD, Open Graph, Shopify)
-- [ ] Upload product photos plus a typed size, which becomes a sized stand-in shape
-- [ ] Upload a 3D file (`.glb/.obj/.stl/.ply`), rescaling cm/mm files when no size is given
-- [ ] Drag and drop photos, files or links straight onto the 3D view
-- [ ] Block private and loopback addresses when downloading links
+- [x] Paste a product link: read name, price, photo and size from the page on the server (JSON-LD, Open Graph, sizes from the page text)
+- [x] Upload a product photo plus a typed size, which becomes a sized stand-in shape
+- [x] Upload a `.glb` 3D file, scaled to the typed size
+- [ ] Upload `.obj/.stl/.ply` files too, and rescale cm/mm files when no size is given
+- [x] Drag and drop photos, `.glb` files or links straight onto the 3D view
+- [x] Block private and loopback addresses when downloading links (also redirects, NAT64, size and time limits)
+- [x] "Your items": custom pieces you imported or uploaded, ready to add to any room
 
 ## 3. Fit tools
-- [ ] Snap to walls while dragging (with an on/off toggle)
+- [x] Snap to walls while dragging (with an on/off toggle)
 - [x] Live distances from the selected piece to each wall
 - [x] Live distances from the selected piece to the nearest furniture
-- [ ] Walkway warning when a gap is under 60 cm
+- [x] Walkway warning when a gap is under 60 cm
 - [x] Top view: true orthographic floor plan
-- [ ] Doorway check: "will it get through the door"
-- [ ] Undo, and saved layouts to compare (A/B with price totals)
+- [x] Doorway check: "will it get through the door" (an estimate, per room door size)
+- [x] Undo (every change, button or Ctrl/Cmd+Z), and saved layouts to compare (A/B with price totals)
 
 ## 4. Cheaper alternatives
-- [ ] For a selected piece, search for similar products that cost less
-- [ ] Fit-check each one without changing the room, and show price and savings
-- [ ] One click to swap an alternative in (uses Replace)
+- [x] For a selected piece, find cheaper products of the same type in the catalog
+- [x] Fit-check each one without changing the room, and show price and savings
+- [x] One click to swap an alternative in (uses Replace)
+- [ ] Search beyond the catalog (other shops)
 
 ## 4b. "Goes well with" suggestions (GenAI)
 Like "Frequently bought together", but for your room, and you see it live.
-- [ ] "Suggest furniture" button: calls Claude with the room (size, pieces, style, gaps, budget) and gets back a few products that would fit and match
-- [ ] Each suggestion gets a 3D model made automatically: the shop's own model if it has one, else one generated from the product photo, else a sized stand-in shape
-- [ ] Preview each suggestion live in the room at a free spot, as a ghost you can accept (Add to room), skip, or swap
-- [ ] Show why each one was picked, its price, and whether it fits the spend mandate
-- [ ] Suggestions come from real product pages (catalog or scraped), never invented prices
+- [x] "Suggest with Claude" button: Claude looks at the room and the budget and picks a few catalog products that fit and match
+- [x] Each suggestion uses the shop's model if we have one, else a sized stand-in shape
+- [ ] Generate a 3D model from the product photo
+- [x] Preview each suggestion live in the room at a free spot, as a ghost you can accept or skip
+- [x] Show why each one was picked, its price, and whether it fits the spend mandate
+- [x] Suggestions come from real product data (catalog), never invented prices
 
 ## 5. AI assistant (Claude)
 - [ ] Chat panel in the room view
@@ -85,7 +89,7 @@ Like "Frequently bought together", but for your room, and you see it live.
 - [ ] Code-split the frontend bundle (currently 1.35 MB)
 
 ## 9. Later
-- [ ] Chrome extension: "Put in my room" from any product page (reads name, price, photos and size)
+- [x] Chrome extension: "Put in my room" from any product page (reads name, price, photo and size; falls back to reading the open page for shops that block servers)
 
 ## Known small issues
 - [x] Backend allows deleting a piece the UI marks as not movable; make both sides agree (now 409)

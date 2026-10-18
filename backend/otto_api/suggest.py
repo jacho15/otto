@@ -110,6 +110,10 @@ def run_suggest(client, room_id, instruction):
         """Find up to 5 spots where a catalog piece fits (inside the walls, no overlap). Saves nothing.
         near ranks spots by distance to that object, else by distance to the room centre.
         against_wall puts the back of the piece on a wall. Pass a spot to propose_suggestions."""
+        with main.lock:
+            known = any(c["id"] == catalog_id for c in main.load_catalog())
+        if not known:  # suggestions are catalog only, so custom items are not offered here
+            raise ToolError(f"Unknown catalog id {catalog_id}. Use ids from get_catalog.")
         return spots_for(room_id, catalog_id, near, against_wall)
 
     @beta_tool(input_schema=PROPOSE_SCHEMA, strict=True)

@@ -26,6 +26,8 @@ def test_catalog_file_served(client):
     r = client.get("/api/catalog/files/models/small-chair.glb")
     assert r.status_code == 200
     assert r.content[:4] == b"glTF"
+    assert r.headers["content-type"] == "model/gltf-binary"
+    assert r.headers["x-content-type-options"] == "nosniff"
     assert client.get("/api/catalog/files/models/missing.glb").status_code == 404
 
 

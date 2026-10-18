@@ -239,7 +239,7 @@ def spots_for(room_id, catalog_id, near, against_wall):
     from . import main
     with main.lock:
         scene = main.load_scene(room_id)
-        item = next((i for i in main.load_catalog() if i["id"] == catalog_id), None)
+        item = main.find_item(catalog_id)
     if item is None:
         raise ToolError(f"Unknown catalog id {catalog_id}. Use ids from get_catalog.")
     target = None
@@ -334,7 +334,7 @@ def run_design(client, room_id, instruction):
         """Add a catalog piece to the room at a position. Rejected if it leaves the walls or overlaps a piece."""
         with main.lock:
             scene = main.load_scene(room_id)
-            item = next((i for i in main.load_catalog() if i["id"] == catalog_id), None)
+            item = main.find_item(catalog_id)
             if item is None:
                 raise ToolError(f"Unknown catalog id {catalog_id}. Use ids from get_catalog.")
             check_fit(scene, item["size"], x, y, yaw_degrees)

@@ -8,6 +8,7 @@ __pycache__/
 .env
 data/mandate.json
 data/saved.json
+data/custom/
 data/rooms/*/orders/
 data/rooms/*/history.json
 data/rooms/*/layouts.json

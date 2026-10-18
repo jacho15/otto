@@ -12,6 +12,7 @@ import {
   useProgress,
 } from '@react-three/drei'
 import {
+  Box3,
   Color,
   Mesh,
   MeshStandardMaterial,
@@ -39,6 +40,8 @@ import {
   wallGaps,
 } from '../geometry'
 import type { Room, RoomObject, Vec2, Vec3 } from '../types'
+import { fitTransform } from './fitModel'
+import ModelBoundary from './ModelBoundary'
 import StandIn from './StandIn'
 
 const ACCENT = '#2F5D50'
@@ -325,7 +328,7 @@ function Piece({
       }}
     >
       <group rotation-x={-Math.PI / 2}>
-        {obj.mesh ? <GlbModel url={meshUrl(roomId, obj.mesh)} obj={obj} /> : <StandIn obj={obj} />}
+        <Model roomId={roomId} obj={obj} />
       </group>
     </group>
   )
@@ -336,13 +339,21 @@ function Preview({ roomId, obj }: { roomId: string; obj: RoomObject }) {
   return (
     <group position={roomToThree([obj.pos[0], obj.pos[1], 0])} rotation-y={obj.yaw}>
       <group rotation-x={-Math.PI / 2}>
-        {obj.mesh ? (
-          <GlbModel url={meshUrl(roomId, obj.mesh)} obj={obj} ghostOpacity={PREVIEW_OPACITY} />
-        ) : (
-          <StandIn obj={obj} ghostOpacity={PREVIEW_OPACITY} />
-        )}
+        <Model roomId={roomId} obj={obj} ghostOpacity={PREVIEW_OPACITY} />
       </group>
     </group>
+  )
+}
+
+/** The piece's model, or a stand-in of the same pose and size when it has none or its file fails to load. */
+function Model({ roomId, obj, ghostOpacity }: { roomId: string; obj: RoomObject; ghostOpacity?: number }) {
+  const standIn = <StandIn obj={obj} ghostOpacity={ghostOpacity} />
+  if (!obj.mesh) return standIn
+  const url = meshUrl(roomId, obj.mesh)
+  return (
+    <ModelBoundary resetKey={url} fallback={standIn}>
+      <GlbModel url={url} obj={obj} ghostOpacity={ghostOpacity} />
+    </ModelBoundary>
   )
 }
 
@@ -350,8 +361,10 @@ function GlbModel({ url, obj, ghostOpacity = GHOST_OPACITY }: { url: string; obj
   const { scene } = useGLTF(url)
   const [r, g, b, a] = obj.rgba
   const ghost = !!obj.hidden
+  const [w, d, h] = obj.size
+  const normalize = !!obj.normalize
 
-  const model = useMemo(() => {
+  const { model, fit } = useMemo(() => {
     const root = scene.clone(true)
     root.traverse((node) => {
       const mesh = node as Mesh
@@ -364,7 +377,9 @@ function GlbModel({ url, obj, ghostOpacity = GHOST_OPACITY }: { url: string; obj
       if (flat) geom.computeVertexNormals()
       const mats = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as Material[]
       const textured = mats.some((m) => (m as MeshStandardMaterial).map)
-      if (geom.attributes.color) {
+      if (normalize) {
+        // An upload keeps the materials it came with.
+      } else if (geom.attributes.color) {
         // Scanned and reconstructed pieces are coloured per vertex.
         mesh.material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.8, flatShading: flat })
       } else if (!textured) {
@@ -389,10 +404,22 @@ function GlbModel({ url, obj, ghostOpacity = GHOST_OPACITY }: { url: string; obj
         mesh.material = Array.isArray(mesh.material) ? own : own[0]
       }
     })
-    return root
-  }, [scene, r, g, b, a, ghost, ghostOpacity])
+    // An uploaded model is y-up, in any units and anywhere in space: stretch it to the piece's size.
+    const box = normalize ? new Box3().setFromObject(root) : null
+    const fit = box && !box.isEmpty() ? fitTransform({ min: box.min.toArray(), max: box.max.toArray() }, [w, d, h]) : null
+    return { model: root, fit }
+  }, [scene, r, g, b, a, ghost, ghostOpacity, normalize, w, d, h])
 
-  return <primitive object={model} />
+  if (!fit) return <primitive object={model} />
+  // The caller's group maps the room frame (z-up) to three.js. Turning +90 degrees about x here undoes that,
+  // so the model's own axes are three.js axes again: x = width, y = height, z = depth. The fit is in those axes.
+  return (
+    <group rotation-x={Math.PI / 2}>
+      <group position={fit.position} scale={fit.scale}>
+        <primitive object={model} />
+      </group>
+    </group>
+  )
 }
 
 function Footprint({ obj, color, dashed }: { obj: RoomObject; color: string; dashed?: boolean }) {

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Otto: Put in my room</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="card">
+    <header class="head">
+      <h1>otto</h1>
+      <button type="button" id="gear" class="gear" title="Settings" aria-label="Settings" aria-expanded="false">⚙</button>
+    </header>
+
+    <section id="settings" class="settings" hidden>
+      <label>Server address
+        <input id="server" type="url" spellcheck="false">
+      </label>
+      <label>Web app address
+        <input id="web" type="url" spellcheck="false">
+      </label>
+      <p class="muted small">The extension can only reach http://localhost:8000 and http://127.0.0.1:8000 unless you change host_permissions in manifest.json.</p>
+      <button type="button" id="save-settings" class="btn">Save settings</button>
+      <p id="settings-status" class="status" role="status"></p>
+    </section>
+
+    <p id="status" class="status" role="status"></p>
+
+    <form id="form" hidden>
+      <img id="photo" class="photo" alt="" hidden>
+      <label>Title
+        <input id="title" type="text" maxlength="120">
+      </label>
+      <div class="row">
+        <label class="grow">Price
+          <input id="price" type="number" min="0" step="0.01">
+        </label>
+        <label class="cur">Currency
+          <input id="currency" type="text" maxlength="3" spellcheck="false">
+        </label>
+      </div>
+      <label>Type
+        <select id="label">
+          <option value="sofa">sofa</option>
+          <option value="armchair">armchair</option>
+          <option value="chair">chair</option>
+          <option value="desk">desk</option>
+          <option value="table">table</option>
+          <option value="coffee table">coffee table</option>
+          <option value="side table">side table</option>
+          <option value="bookcase">bookcase</option>
+          <option value="lamp">lamp</option>
+          <option value="furniture">furniture</option>
+        </select>
+      </label>
+      <div class="field">
+        <div class="field-head">
+          <span>Size (W × D × H)</span>
+          <span class="units" role="group" aria-label="Unit">
+            <button type="button" class="unit on" data-unit="cm">cm</button>
+            <button type="button" class="unit" data-unit="in">in</button>
+          </span>
+        </div>
+        <div class="row size">
+          <input id="w" type="number" min="0" step="any" placeholder="W" aria-label="Width">
+          <span class="times">×</span>
+          <input id="d" type="number" min="0" step="any" placeholder="D" aria-label="Depth">
+          <span class="times">×</span>
+          <input id="h" type="number" min="0" step="any" placeholder="H" aria-label="Height">
+        </div>
+      </div>
+      <p id="notes" class="muted small"></p>
+      <label>Room
+        <select id="room"></select>
+      </label>
+      <div class="actions">
+        <button type="submit" id="put" class="btn primary">Put in my room</button>
+        <button type="button" id="keep" class="btn">Save to my items</button>
+      </div>
+    </form>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
