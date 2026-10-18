@@ -2,7 +2,7 @@
 import re
 import secrets
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException, UploadFile
@@ -51,6 +51,7 @@ class CustomItemBody(BaseModel):
     photo: str | None = None
     model: str | None = None
     image_url: str | None = None
+    price_source: Literal["page", "listing"] = "page"  # "listing": the price is from a shop search result, not the product page
 
     @field_validator("url", "image_url")
     @classmethod
@@ -177,6 +178,7 @@ def add_custom_item(body: CustomItemBody):
         "rgba": [0.7, 0.7, 0.7, 1],
         "model": body.model,
         "photo": photo,
+        "price_source": body.price_source,
         "custom": True,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }

@@ -4,7 +4,7 @@ import os
 
 from fastapi import APIRouter, HTTPException
 
-from . import ikea
+from . import ikea, shops
 from .agent import AgentError
 from .fit import footprint_corners, footprints_overlap, outside_walls
 from .place import add_item
@@ -79,21 +79,34 @@ def load_visible(room_id, name):
     return scene, obj
 
 
-@router.post("/api/rooms/{room_id}/objects/{name}/alternatives/ikea")
-def get_ikea_alternatives(room_id: str, name: str):
-    """Look for similar pieces on IKEA, live. Like the catalog list, each is fit-checked and nothing is written."""
-    from . import main
-    scene, obj = load_visible(room_id, name)
+CANT_SWAP = "This piece can't be swapped, so there is nothing to search for."
+
+
+def piece_of(obj):
+    """(label, price, currency) of a room piece."""
     product = obj.get("product") or {}
-    price = product.get("price")
-    currency = product.get("currency") or "USD"
-    label = obj.get("label")
-    answer = {"object": name, "price": price, "currency": currency, "alternatives": []}
+    return obj.get("label"), product.get("price"), product.get("currency") or "USD"
+
+
+def found_message(items, price, where, limit):
+    kind = "cheaper similar" if price is not None else "similar"
+    count = min(len(items), limit)
+    if not items:
+        return f"No {kind} pieces found {where} right now."
+    return f"Found {count} {kind} piece{'s' if count != 1 else ''} {where}."
+
+
+def ikea_search(obj):
+    """The shortlisted IKEA items for a piece (before the fit check), searched live.
+    Raise HTTPException if a key is missing or the search fails."""
+    from . import main
+    label, price, currency = piece_of(obj)
+    if not obj.get("movable", True) or not (label or "").strip():
+        return {"items": [], "message": CANT_SWAP}
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise HTTPException(503, "Add ANTHROPIC_API_KEY to .env")
-    if not obj.get("movable", True) or not (label or "").strip():
-        return {**answer, "message": "This piece can't be swapped, so there is nothing to search for."}
+    product = obj.get("product") or {}
     prompt = ikea.prompt_for(label, product.get("title"), obj["size"], price, currency, obj.get("rgba"))
     try:
         products = ikea.find_products(main.make_client(api_key), prompt)
@@ -103,16 +116,64 @@ def get_ikea_alternatives(room_id: str, name: str):
         "label": label, "size": obj["size"], "price": price, "currency": currency, "own_url": product.get("url"),
     }
     items = ikea.shortlist(products, wanted)
-    scene, obj = load_visible(room_id, name)  # the room may have changed during the search
+    return {"items": items, "message": found_message(items, price, "on IKEA", ikea.MAX_RESULTS)}
+
+
+def shops_search(obj):
+    """The shortlisted shop items for a piece (before the fit check), searched live.
+    Raise HTTPException if a key is missing or the search fails."""
+    from . import main
+    label, price, currency = piece_of(obj)
+    if not obj.get("movable", True) or not (label or "").strip():
+        return {"items": [], "message": CANT_SWAP}
+    if price is not None and currency != "USD":
+        message = f"Shop prices are in USD, so they can't be compared with a price in {currency}."
+        return {"items": [], "message": message}
+    serp_key = os.environ.get("SERPAPI_API_KEY")
+    if not serp_key:
+        raise HTTPException(503, "Add SERPAPI_API_KEY to .env")
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(503, "Add ANTHROPIC_API_KEY to .env")
+    wanted = {"label": label, "size": obj["size"], "price": price, "currency": currency, "rgba": obj.get("rgba")}
+    try:
+        items = shops.find_items(main.make_client(api_key), serp_key, wanted)
+    except AgentError as e:
+        raise HTTPException(502, str(e))
+    return {"items": items, "message": found_message(items, price, "in other shops", shops.MAX_RESULTS)}
+
+
+def fit_checked(room_id, name, items, limit):
+    """The items with their fit against the room as it is now, fits first, at most limit."""
+    scene, _ = load_visible(room_id, name)  # the room may have changed during the search
     alternatives = []
     for item in items:
         problems = replace_problems(scene["room"], scene["objects"], item, name)
         alternatives.append({**item, "fits": not problems, "problems": problems})
     alternatives.sort(key=lambda a: (not a["fits"], -(a["savings"] or 0), -a["similarity"], a["title"]))
-    alternatives = alternatives[:ikea.MAX_RESULTS]
-    kind = "cheaper similar" if price is not None else "similar"
-    message = (
-        f"Found {len(alternatives)} {kind} piece{'s' if len(alternatives) != 1 else ''} on IKEA."
-        if alternatives else f"No {kind} pieces found on IKEA right now."
-    )
-    return {**answer, "alternatives": alternatives, "message": message}
+    return alternatives[:limit]
+
+
+def search_answer(room_id, name, obj, found, limit):
+    _, price, currency = piece_of(obj)
+    return {
+        "object": name, "price": price, "currency": currency,
+        "alternatives": fit_checked(room_id, name, found["items"], limit),
+        "message": found["message"],
+    }
+
+
+@router.post("/api/rooms/{room_id}/objects/{name}/alternatives/ikea")
+def get_ikea_alternatives(room_id: str, name: str):
+    """Look for similar pieces on IKEA, live. Like the catalog list, each is fit-checked and nothing in the room
+    is written."""
+    _, obj = load_visible(room_id, name)
+    return search_answer(room_id, name, obj, ikea_search(obj), ikea.MAX_RESULTS)
+
+
+@router.post("/api/rooms/{room_id}/objects/{name}/alternatives/shops")
+def get_shop_alternatives(room_id: str, name: str):
+    """Look for similar pieces in other shops (Google Shopping through SerpApi), live. Prices are the listed ones
+    and sizes are estimated. Like the IKEA list, each is fit-checked and nothing in the room is written."""
+    _, obj = load_visible(room_id, name)
+    return search_answer(room_id, name, obj, shops_search(obj), shops.MAX_RESULTS)

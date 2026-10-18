@@ -6,6 +6,7 @@ export interface Product {
   url: string
   price?: number | null
   currency: string
+  price_source?: 'page' | 'listing' // "listing": the price is from a shop search result, not checked on the product page
 }
 
 export interface RoomObject {
@@ -259,6 +260,7 @@ export interface CustomItem {
   rgba: [number, number, number, number]
   model: string | null
   photo: string | null
+  price_source?: 'page' | 'listing'
   custom: true
   created_at: string
 }
@@ -273,6 +275,7 @@ export interface NewCustomItem {
   photo?: string
   model?: string
   image_url?: string
+  price_source?: 'page' | 'listing'
 }
 
 export interface DataItem {
@@ -315,5 +318,39 @@ export interface IkeaResult {
   price: number | null
   currency: string
   alternatives: IkeaAlternative[] // fits first, then the biggest savings
+  message: string
+}
+
+/** A piece from another shop, from a Google Shopping search. The price is the listed one and the size is estimated. */
+export interface ShopAlternative {
+  id: string
+  title: string
+  label: string
+  url: string
+  price: number
+  currency: string // USD
+  size: Vec3 // metres, estimated
+  rgba: [number, number, number, number]
+  model: null
+  photo: null
+  source: 'shop'
+  catalog_id: null
+  image_url: string | null
+  similarity: number // 0 to 1
+  why: string
+  savings: number | null // null when the piece being replaced has no price
+  savings_pct: number | null // whole percent
+  shop: string // the store name
+  size_estimated: true
+  price_note: string
+  fits: boolean
+  problems: string[]
+}
+
+export interface ShopResult {
+  object: string
+  price: number | null
+  currency: string
+  alternatives: ShopAlternative[] // fits first, then the biggest savings
   message: string
 }

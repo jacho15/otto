@@ -87,6 +87,7 @@ def data_dir(tmp_path, monkeypatch):
 def no_api_key(monkeypatch):
     """Tests never see a real key, even if the repo .env has one."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
 
 
 @pytest.fixture

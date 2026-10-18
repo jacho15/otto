@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { customItemFor, ikeaButtonText, ikeaSavingsText, savingsText, sizeCmText } from './alternativesLogic'
-import type { IkeaAlternative } from './types'
+import {
+  customItemFor,
+  estimatedSizeText,
+  ikeaButtonText,
+  ikeaSavingsText,
+  savingsText,
+  shopButtonText,
+  shopLinkText,
+  sizeCmText,
+} from './alternativesLogic'
+import type { IkeaAlternative, ShopAlternative } from './types'
 
 describe('savingsText', () => {
   it('shows the amount and the percent', () => {
@@ -79,5 +88,77 @@ describe('customItemFor', () => {
     const item = customItemFor({ ...found, price: null, image_url: null })
     expect(item).not.toHaveProperty('price')
     expect(item).not.toHaveProperty('image_url')
+    expect(item).not.toHaveProperty('price_source')
+  })
+})
+
+describe('estimatedSizeText', () => {
+  it('says the size is a guess', () => {
+    expect(estimatedSizeText([1.55, 0.9, 0.85])).toBe('about 155 × 90 × 85 cm (estimated)')
+  })
+
+  it('rounds metres to whole centimetres', () => {
+    expect(estimatedSizeText([0.6, 0.605, 0.8])).toBe('about 60 × 61 × 80 cm (estimated)')
+  })
+})
+
+describe('shopButtonText', () => {
+  it('names the search and shows it is waiting', () => {
+    expect(shopButtonText(false)).toBe('Search other shops')
+    expect(shopButtonText(true)).toBe('Searching other shops…')
+  })
+})
+
+describe('shopLinkText', () => {
+  it('names Google Shopping for a Google link', () => {
+    expect(shopLinkText('https://www.google.com/shopping/product/1', 'Target')).toBe('View on Google Shopping')
+  })
+
+  it('names the shop for any other link', () => {
+    expect(shopLinkText('https://www.wayfair.com/loveseat', 'Wayfair')).toBe('View at Wayfair')
+  })
+})
+
+describe('customItemFor a shop piece', () => {
+  const found: ShopAlternative = {
+    id: 'shop-1a2b3c4d',
+    title: 'Gray loveseat',
+    label: 'loveseat',
+    url: 'https://www.wayfair.com/loveseat',
+    price: 299.99,
+    currency: 'USD',
+    size: [1.55, 0.85, 0.85],
+    rgba: [0.7, 0.7, 0.7, 1],
+    model: null,
+    photo: null,
+    source: 'shop',
+    catalog_id: null,
+    image_url: 'https://encrypted-tbn0.gstatic.com/x.jpg',
+    similarity: 0.9,
+    why: 'A loveseat, size from the title.',
+    savings: 100,
+    savings_pct: 25,
+    shop: 'Wayfair',
+    size_estimated: true,
+    price_note: 'Listed price on Wayfair. Size is estimated from the listing.',
+    fits: true,
+    problems: [],
+  }
+
+  it('marks the price as a listing price', () => {
+    expect(customItemFor(found)).toEqual({
+      title: 'Gray loveseat',
+      url: 'https://www.wayfair.com/loveseat',
+      price: 299.99,
+      currency: 'USD',
+      size: [1.55, 0.85, 0.85],
+      label: 'loveseat',
+      image_url: 'https://encrypted-tbn0.gstatic.com/x.jpg',
+      price_source: 'listing',
+    })
+  })
+
+  it('leaves out a missing photo', () => {
+    expect(customItemFor({ ...found, image_url: null })).not.toHaveProperty('image_url')
   })
 })

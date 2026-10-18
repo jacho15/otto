@@ -49,7 +49,7 @@ Website work only. The video-to-room pipeline is being built on a separate branc
 - [x] Fit-check each one without changing the room, and show price and savings
 - [x] One click to swap an alternative in (uses Replace)
 - [x] "Search IKEA for more": Claude searches ikea.com for the same type and a similar size, the server reads each real page for price and size, and only cheaper pieces that fit are shown (also "Find similar at IKEA" for pieces with no price)
-- [ ] Other shops (Amazon, Wayfair, Target, ...) through a shopping search API; their pages block servers, so the extension covers exact product pages for now
+- [x] "Search other shops": Google Shopping through SerpApi (needs `SERPAPI_API_KEY`). Prices are the listed ones and sizes are estimated by Claude from the titles, so swapped-in pieces are marked "listed price" in Checkout. The extension still covers exact product pages
 
 ## 4b. "Goes well with" suggestions (GenAI)
 Like "Frequently bought together", but for your room, and you see it live.

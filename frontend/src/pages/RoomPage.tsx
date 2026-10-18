@@ -462,7 +462,7 @@ export default function RoomPage() {
           <ChatPanel key={dataEpoch} roomId={id} active={tab === 'chat'} onSend={chatSend} onRunning={setChatRunning} />
         </div>
         <div hidden={tab !== 'checkout'}>
-          <Checkout key={dataEpoch} roomId={id} orders={orders} setOrders={setOrders} />
+          <Checkout key={dataEpoch} roomId={id} orders={orders} setOrders={setOrders} objects={objects} />
         </div>
         <div hidden={tab !== 'shop'}>
           <Suggestions

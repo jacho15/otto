@@ -1,5 +1,5 @@
 import { ApiError, formatPrice } from './api'
-import type { Mandate, Order, OrderItem } from './types'
+import type { Mandate, Order, OrderItem, RoomObject } from './types'
 
 /** Currencies the spend mandate can be set in. */
 export const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'SEK']
@@ -101,3 +101,17 @@ export function currentViolations(items: OrderItem[], mandate: Mandate, today = 
   }
   return problems
 }
+
+/** True when the price of the room piece called objectName is from a shop listing, not its product page. */
+export const hasListedPrice = (objects: RoomObject[], objectName: string): boolean =>
+  objects.find((o) => o.name === objectName)?.product?.price_source === 'listing'
+
+/** True when the link is on google.com or one of its subdomains. */
+export function isGoogleUrl(url: string): boolean {
+  const host = shopHost(url)
+  return host === 'google.com' || !!host?.endsWith('.google.com')
+}
+
+/** True when a listed price comes with a Google Shopping link, which a shop limit in the mandate may refuse. */
+export const needsGoogleNote = (objects: RoomObject[], objectName: string, url: string): boolean =>
+  hasListedPrice(objects, objectName) && isGoogleUrl(url)

@@ -93,6 +93,8 @@ def catalog_object(item, name, pos, yaw):
             "currency": item["currency"],
         },
     }
+    if item.get("price_source"):
+        obj["product"]["price_source"] = item["price_source"]
     if custom and item["model"]:
         obj["normalize"] = True
     if not item["model"]:

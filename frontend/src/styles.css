@@ -525,6 +525,11 @@ a {
   font-size: 13px;
 }
 
+.listed-tag {
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .checkout-total {
   padding-top: 10px;
   font-size: 16px;

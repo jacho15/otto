@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
 import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import { agentCheckout, approveOrder, cancelOrder, deleteMandate, formatPrice, getMandate, putMandate } from '../api'
-import { CURRENCIES, currentViolations, defaultExpiry, errorText, mandateSummary, parseLimit, parseShops, tokenLabel, violationsOf } from '../checkoutLogic'
+import { CURRENCIES, currentViolations, defaultExpiry, errorText, hasListedPrice, mandateSummary, needsGoogleNote, parseLimit, parseShops, tokenLabel, violationsOf } from '../checkoutLogic'
 import { totalLines } from '../moneyLogic'
-import type { Mandate, Order } from '../types'
+import type { Mandate, Order, RoomObject } from '../types'
 import MoneyLines from './MoneyLines'
 
 interface Props {
   roomId: string
   orders: Order[]
   setOrders: Dispatch<SetStateAction<Order[]>>
+  objects: RoomObject[]
 }
 
 const DEFAULT_INSTRUCTION = 'Buy the furniture in this room within my limits.'
@@ -17,7 +18,7 @@ const DEFAULT_INSTRUCTION = 'Buy the furniture in this room within my limits.'
 const upsert = (orders: Order[], o: Order) =>
   orders.some((x) => x.id === o.id) ? orders.map((x) => (x.id === o.id ? o : x)) : [o, ...orders]
 
-export default function Checkout({ roomId, orders, setOrders }: Props) {
+export default function Checkout({ roomId, orders, setOrders, objects }: Props) {
   const [mandate, setMandate] = useState<Mandate | null | undefined>(undefined) // undefined: loading
   const [error, setError] = useState<string | null>(null)
   const [receipt, setReceipt] = useState<Order | null>(null)
@@ -50,6 +51,7 @@ export default function Checkout({ roomId, orders, setOrders }: Props) {
               roomId={roomId}
               order={proposed}
               mandate={mandate}
+              objects={objects}
               onUpdate={(o) => setOrders((prev) => upsert(prev, o))}
               onApproved={setReceipt}
             />
@@ -230,12 +232,14 @@ function ProposedCard({
   roomId,
   order,
   mandate,
+  objects,
   onUpdate,
   onApproved,
 }: {
   roomId: string
   order: Order
   mandate: Mandate
+  objects: RoomObject[]
   onUpdate: (o: Order) => void
   onApproved: (o: Order) => void
 }) {
@@ -300,9 +304,18 @@ function ProposedCard({
               ) : (
                 <span>{item.title}</span>
               )}
-              <span className="item-price">{formatPrice(item.price, item.currency)}</span>
+              <span className="item-price">
+                {hasListedPrice(objects, item.object_name) && <span className="muted listed-tag">listed price </span>}
+                {formatPrice(item.price, item.currency)}
+              </span>
             </div>
             <p className="muted order-reason">{item.reason}</p>
+            {needsGoogleNote(objects, item.object_name, item.url) && (
+              <p className="muted order-reason">
+                Google Shopping link: a shop limit only allows it if it includes google.com. To buy from the shop
+                itself, open the link and add the shop's own page with the extension or Add by link.
+              </p>
+            )}
           </li>
         ))}
       </ul>

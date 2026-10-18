@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from './api'
-import { currentViolations, defaultExpiry, errorText, mandateSummary, orderedNames, parseLimit, parseShops, violationsOf } from './checkoutLogic'
-import type { Mandate, Order, OrderItem } from './types'
+import { currentViolations, defaultExpiry, errorText, hasListedPrice, isGoogleUrl, mandateSummary, needsGoogleNote, orderedNames, parseLimit, parseShops, violationsOf } from './checkoutLogic'
+import type { Mandate, Order, OrderItem, RoomObject } from './types'
 
 describe('parseShops', () => {
   it('trims, lowercases, drops empties and duplicates', () => {
@@ -149,5 +149,56 @@ describe('currentViolations', () => {
   it('flags an expired mandate', () => {
     expect(currentViolations(items, mandate({ expires: '2026-01-27' }), today)).toEqual(['The mandate expired on 2026-01-27.'])
     expect(currentViolations(items, mandate({ expires: '2026-01-28' }), today)).toEqual([])
+  })
+})
+
+describe('hasListedPrice', () => {
+  const piece = (name: string, product?: RoomObject['product']): RoomObject =>
+    ({ name, label: 'sofa', pos: [0, 0, 0], yaw: 0, size: [1, 1, 1], mesh: null, product }) as RoomObject
+  const objects = [
+    piece('listed', { title: 'A', url: 'https://x.test/a', price: 10, currency: 'USD', price_source: 'listing' }),
+    piece('checked', { title: 'B', url: 'https://x.test/b', price: 10, currency: 'USD', price_source: 'page' }),
+    piece('old', { title: 'C', url: 'https://x.test/c', price: 10, currency: 'USD' }),
+    piece('bare'),
+  ]
+  it('is true only for a price that came from a listing', () => {
+    expect(hasListedPrice(objects, 'listed')).toBe(true)
+    expect(hasListedPrice(objects, 'checked')).toBe(false)
+    expect(hasListedPrice(objects, 'old')).toBe(false)
+    expect(hasListedPrice(objects, 'bare')).toBe(false)
+  })
+  it('is false for a piece that is not in the room', () => {
+    expect(hasListedPrice(objects, 'gone')).toBe(false)
+    expect(hasListedPrice([], 'listed')).toBe(false)
+  })
+})
+
+describe('isGoogleUrl', () => {
+  it('is true for google.com and its subdomains', () => {
+    expect(isGoogleUrl('https://www.google.com/shopping/product/1')).toBe(true)
+    expect(isGoogleUrl('https://google.com/x')).toBe(true)
+    expect(isGoogleUrl('https://shopping.google.com/x')).toBe(true)
+  })
+  it('is false for other hosts and bad links', () => {
+    expect(isGoogleUrl('https://www.wayfair.com/google.com')).toBe(false)
+    expect(isGoogleUrl('https://notgoogle.com/x')).toBe(false)
+    expect(isGoogleUrl('https://google.com.evil.test/x')).toBe(false)
+    expect(isGoogleUrl('not a link')).toBe(false)
+  })
+})
+
+describe('needsGoogleNote', () => {
+  const piece = (name: string, price_source?: 'listing' | 'page'): RoomObject =>
+    ({
+      name, label: 'sofa', pos: [0, 0, 0], yaw: 0, size: [1, 1, 1], mesh: null,
+      product: { title: 'A', url: 'https://x.test/a', price: 10, currency: 'USD', price_source },
+    }) as RoomObject
+  const objects = [piece('listed', 'listing'), piece('checked', 'page')]
+  const google = 'https://www.google.com/shopping/product/1'
+  it('needs a listed price and a Google link', () => {
+    expect(needsGoogleNote(objects, 'listed', google)).toBe(true)
+    expect(needsGoogleNote(objects, 'listed', 'https://www.wayfair.com/a')).toBe(false)
+    expect(needsGoogleNote(objects, 'checked', google)).toBe(false)
+    expect(needsGoogleNote(objects, 'gone', google)).toBe(false)
   })
 })

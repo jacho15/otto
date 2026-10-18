@@ -92,7 +92,7 @@ def test_create_list_delete(client, data_dir):
     assert {k: v for k, v in item.items() if k not in ("id", "created_at")} == {
         "title": "Cozy Sofa", "url": "https://shop.test/sofa", "price": 300, "currency": "EUR",
         "size": [2.0, 0.9, 0.8], "label": "sofa", "rgba": [0.7, 0.7, 0.7, 1],
-        "model": None, "photo": None, "custom": True,
+        "model": None, "photo": None, "price_source": "page", "custom": True,
     }
     assert item["created_at"]
     second = client.post(ITEMS, json={**ITEM, "title": "  Plain Chair  ", "label": "chair"}).json()
@@ -216,7 +216,9 @@ def test_add_custom_item_with_model(client):
     obj = objects(client)[name]
     assert obj["mesh"] == model and obj["normalize"] is True and "shape" not in obj
     assert obj["size"] == [2.0, 0.9, 0.8] and obj["label"] == "sofa" and obj["catalog_id"] == item["id"]
-    assert obj["product"] == {"title": "Cozy Sofa", "url": "https://shop.test/sofa", "price": 120, "currency": "USD"}
+    assert obj["product"] == {
+        "title": "Cozy Sofa", "url": "https://shop.test/sofa", "price": 120, "currency": "USD", "price_source": "page",
+    }
     assert "photo" not in obj
     assert r.json()["total"] == {"amount": 120 + 449 + 50.5, "currency": "USD"}
 

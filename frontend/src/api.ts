@@ -18,6 +18,7 @@ import type {
   Room,
   RoomSummary,
   SavedItem,
+  ShopResult,
   SuggestResult,
   UploadResult,
   Vec2,
@@ -212,3 +213,7 @@ export function formatPrice(amount: number, currency = 'USD') {
 /** Search IKEA live for pieces like this one. Takes 20 to 45 seconds. Nothing in the room changes. */
 export const searchIkea = (id: string, name: string) =>
   request<IkeaResult>(`${objectUrl(id, name)}/alternatives/ikea`, { method: 'POST' })
+
+/** Search other shops (Google Shopping) for pieces like this one. Prices are listed ones, sizes are estimated. Nothing in the room changes. */
+export const searchShops = (id: string, name: string) =>
+  request<ShopResult>(`${objectUrl(id, name)}/alternatives/shops`, { method: 'POST' })
