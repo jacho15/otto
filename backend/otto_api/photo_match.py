@@ -171,7 +171,8 @@ def match_view(match: dict, room_scene: dict | None) -> dict:
     view = {
         "id": item["id"], "title": item["title"], "label": item["label"], "url": item["url"],
         "price": item["price"], "currency": item["currency"], "size": item["size"],
-        "photo_url": f"/api/catalog/files/{item['photo']}",
+        # newer catalog pieces can have no photo (they're drawn as stand-in shapes)
+        "photo_url": f"/api/catalog/files/{item['photo']}" if item.get("photo") else None,
         "score": match["score"], "why": match["why"],
     }
     if room_scene is not None:

@@ -26,6 +26,7 @@ CATALOG = [
     item("loveseat", "sofa", (1.7, 0.9, 0.7), 449, (0.9, 0.9, 0.88, 1)),
     item("desk", "desk", (1.1, 0.4, 0.75), 80),
     item("lamp", "lamp", (0.3, 0.3, 1.5), 40),
+    {**item("no-photo-chair", "armchair", (0.8, 0.85, 0.8), 89, (0.95, 0.95, 0.95, 1)), "photo": None, "model": None},
 ]
 
 WHITE_ARMCHAIR = {
@@ -110,6 +111,12 @@ def test_match_photo_returns_ranked_matches_and_sends_the_image(post):
     assert sent["fallbacks"] == "default"
     image = sent["messages"][0]["content"][0]
     assert image["type"] == "image" and image["source"]["media_type"] == "image/jpeg"
+
+
+def test_match_photo_piece_without_a_photo_has_no_photo_url(post):
+    r = post(FakeApi([features_turn(WHITE_ARMCHAIR)]))
+    by_id = {m["id"]: m for m in r.json()["matches"]}
+    assert by_id["no-photo-chair"]["photo_url"] is None
 
 
 def test_match_photo_fit_checks_against_a_room(post):
