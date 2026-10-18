@@ -24,6 +24,7 @@ from .alternatives import router as alternatives_router
 from .chat import router as chat_router
 from .custom import router as custom_router
 from .data import router as data_router
+from .photo_match import router as photo_match_router
 from .extension_api import router as extension_router
 from .place import add_at, add_item
 from .places import router as places_router
@@ -40,6 +41,7 @@ app.include_router(custom_router)
 app.include_router(extension_router)
 app.include_router(chat_router)
 app.include_router(data_router)
+app.include_router(photo_match_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"^chrome-extension://[a-p]{32}$",
