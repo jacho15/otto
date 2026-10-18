@@ -106,17 +106,21 @@ def open_client() -> httpx.Client:
     return httpx.Client(timeout=TIMEOUT, follow_redirects=False, trust_env=False)
 
 
-def fetch(url: str, max_bytes: int, accept: str = PAGE_ACCEPT, allowed=None) -> tuple[bytes, str, str]:
+def fetch(
+    url: str, max_bytes: int, accept: str = PAGE_ACCEPT, allowed=None, timeout: float | None = None,
+) -> tuple[bytes, str, str]:
     """Download url. Return (body, content type, final url). Raise FetchError, or BadUrl for a bad address.
 
-    allowed(url), if given, is checked for the address and for every redirect before it is requested."""
-    deadline = time.monotonic() + TIMEOUT
+    allowed(url), if given, is checked for the address and for every redirect before it is requested.
+    timeout is the time for the whole fetch in seconds, TIMEOUT if not given."""
+    timeout = TIMEOUT if timeout is None else timeout
+    deadline = time.monotonic() + timeout
 
     def remaining() -> float:
         left = deadline - time.monotonic()
         if left <= 0:
             raise FetchError(TOO_SLOW)
-        return min(TIMEOUT, left)
+        return min(timeout, left)
 
     headers = {
         "User-Agent": USER_AGENT, "Accept": accept, "Accept-Language": "en-US,en;q=0.9",

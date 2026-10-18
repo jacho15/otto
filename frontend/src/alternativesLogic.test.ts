@@ -4,12 +4,25 @@ import {
   estimatedSizeText,
   ikeaButtonText,
   ikeaSavingsText,
+  lookText,
   savingsText,
   shopButtonText,
   shopLinkText,
   sizeCmText,
 } from './alternativesLogic'
 import type { IkeaAlternative, ShopAlternative } from './types'
+
+describe('lookText', () => {
+  it('says how much it looks like the piece', () => {
+    expect(lookText(0.95)).toBe('Looks very similar')
+    expect(lookText(0.8)).toBe('Looks very similar')
+    expect(lookText(0.6)).toBe('Looks similar')
+  })
+
+  it('says nothing when it was not judged', () => {
+    expect(lookText(null)).toBeNull()
+  })
+})
 
 describe('savingsText', () => {
   it('shows the amount and the percent', () => {
@@ -66,6 +79,7 @@ describe('customItemFor', () => {
     image_url: 'https://www.ikea.com/images/x.jpg',
     similarity: 1,
     why: 'Same type, close size.',
+    look: 0.8,
     savings: 10.5,
     savings_pct: 21,
     fits: true,
@@ -136,6 +150,7 @@ describe('customItemFor a shop piece', () => {
     image_url: 'https://encrypted-tbn0.gstatic.com/x.jpg',
     similarity: 0.9,
     why: 'A loveseat, size from the title.',
+    look: null,
     savings: 100,
     savings_pct: 25,
     shop: 'Wayfair',

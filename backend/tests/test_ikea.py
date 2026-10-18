@@ -1,11 +1,12 @@
 import json
+import time
 from types import SimpleNamespace
 
 import httpx
 import pytest
 
 from conftest import ROOM
-from otto_api import ikea, main
+from otto_api import ikea, looks, main
 from test_agent import FakeApi, text
 
 URL = f"/api/rooms/{ROOM}/objects/chair/alternatives/ikea"
@@ -70,7 +71,7 @@ PAGES = {
 
 
 @pytest.fixture
-def ikea_api(client, net, monkeypatch):
+def ikea_api(client, net, monkeypatch, fake_looks):
     """Run the IKEA route against a FakeApi and fake IKEA pages. Returns run(api)."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     net.hosts["www.ikea.com"] = HOST_IP
@@ -148,12 +149,13 @@ def test_fields_and_savings(ikea_api):
     assert set(alt) >= {"id", "title", "label", "url", "price", "currency", "size", "rgba", "model", "photo"}
 
 
-def test_sort_fits_first_then_savings_then_similarity(ikea_api):
+def test_sort_fits_first_then_similarity_then_savings(ikea_api):
     r = ikea_api(one_turn("good", "wide", "cheaper"))
-    assert ids(r) == ["CHEAPER chair", "GOOD chair", "WIDE chair"]
-    wide = r.json()["alternatives"][2]
-    assert wide["fits"] is False and wide["problems"]
-    assert [a["savings"] for a in r.json()["alternatives"][:2]] == [20.5, 10.5]
+    alts = r.json()["alternatives"]
+    assert ids(r)[-1] == "WIDE chair"
+    assert alts[-1]["fits"] is False and alts[-1]["problems"]
+    fitting = [a for a in alts if a["fits"]]
+    assert [(-a["similarity"], -a["savings"]) for a in fitting] == sorted((-a["similarity"], -a["savings"]) for a in fitting)
 
 
 def test_similarity_breaks_a_savings_tie(ikea_api, net):
@@ -381,6 +383,7 @@ def test_only_web_search_results_are_used(ikea_api):
 def fake_clock(monkeypatch):
     now = [1000.0]
     monkeypatch.setattr(ikea, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    monkeypatch.setattr(looks, "time", SimpleNamespace(monotonic=lambda: now[0]))
     return now
 
 
@@ -435,3 +438,66 @@ def test_redirect_to_another_ikea_page_is_followed(ikea_api, net):
 
     net.handler = serve
     assert ids(ikea_api(one_turn("old"))) == ["GOOD chair"]
+
+
+# --- looks ---
+
+def test_poor_looks_are_dropped_and_the_rest_blended_with_the_size(ikea_api, fake_looks):
+    fake_looks.looks = {"GOOD chair": 0.8, "CHEAPER chair": 0.3}
+    r = ikea_api(one_turn("good", "cheaper"))
+    assert ids(r) == ["GOOD chair"]
+    alt = r.json()["alternatives"][0]
+    assert alt["look"] == 0.8 and alt["similarity"] == 0.87  # 0.65 * 0.8 + 0.35 * 1.0
+    assert alt["why"] == "Same shell shape. Same type, close size."
+
+
+def test_pieces_that_could_not_be_judged_are_left_out_when_one_is_judged(ikea_api, fake_looks):
+    fake_looks.looks = {"GOOD chair": 0.8}
+    r = ikea_api(one_turn("good", "cheaper"))
+    assert ids(r) == ["GOOD chair"]
+
+
+def test_pieces_are_kept_when_none_could_be_judged(ikea_api, fake_looks):
+    r = ikea_api(one_turn("good", "cheaper"))
+    assert {a["title"]: a["look"] for a in r.json()["alternatives"]} == {"GOOD chair": None, "CHEAPER chair": None}
+    assert r.json()["alternatives"][0]["why"] == "Same type, close size."
+
+
+def test_pieces_that_could_not_be_judged_are_left_out_when_three_look_right(ikea_api, net, fake_looks):
+    for n in "abc":
+        net.pages[f"/us/en/p/{n}"] = page(f"{n.upper()} chair", 40, (60, 60, 80))
+    fake_looks.looks = {"A chair": 0.9, "B chair": 0.6, "C chair": 0.5}
+    r = ikea_api(one_turn("good", "a", "b", "c"))
+    assert sorted(ids(r)) == ["A chair", "B chair", "C chair"]
+
+
+def test_the_look_step_gets_the_original_the_shortlist_and_a_short_deadline(ikea_api, fake_looks):
+    ikea_api(one_turn("good", "table", "cheaper"))
+    (call,) = fake_looks.calls
+    assert call.original["title"] == "chair" and call.original["label"] == "chair" and call.original["image"] is None
+    assert [c["title"] for c in call.candidates] == ["GOOD chair", "CHEAPER chair"]  # the table is not the same type
+    assert call.candidates[0]["image_url"] == "https://www.ikea.com/images/x.jpg" and call.candidates[0]["label"] == "chair"
+    assert 0 < call.deadline - time.monotonic() <= looks.BUDGET
+
+
+def test_no_look_step_without_a_shortlist(ikea_api, fake_looks):
+    assert ikea_api(one_turn("table")).json()["alternatives"] == []
+    assert fake_looks.calls == []
+
+
+def test_the_look_step_stays_inside_the_page_budget(ikea_api, fake_looks, monkeypatch):
+    now = fake_clock(monkeypatch)
+    monkeypatch.setattr(ikea, "read_pages", lambda urls: (now.__setitem__(0, now[0] + 40), {
+        u: ikea.parse_product(PAGES["/us/en/p/good"], u) for u in urls})[1])
+    ikea_api(one_turn("good"))
+    assert fake_looks.calls[0].deadline == now[0] + 5  # 45 seconds in all for the pages and the looks
+
+
+def test_the_original_photo_comes_from_its_catalog_item(ikea_api, data_dir, fake_looks):
+    jpeg = bytes([0xFF, 0xD8, 0xFF, 0xE0]) + bytes(8)
+    (data_dir / "catalog" / "photos").mkdir()
+    (data_dir / "catalog" / "photos" / "small-chair.jpg").write_bytes(jpeg)
+    edit_chair(data_dir, catalog_id="small-chair", rgba=[0.1, 0.1, 0.1, 1])
+    ikea_api(one_turn("good"))
+    original = fake_looks.calls[0].original
+    assert original["image"] == (jpeg, "image/jpeg") and original["colour"] == "#1a1a1a"

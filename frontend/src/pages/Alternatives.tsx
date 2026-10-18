@@ -5,6 +5,7 @@ import {
   estimatedSizeText,
   ikeaButtonText,
   ikeaSavingsText,
+  lookText,
   savingsText,
   shopButtonText,
   shopLinkText,
@@ -234,7 +235,10 @@ export default function Alternatives({ roomId, piece, door, serverVersion, busy,
                             </p>
                           </>
                         )}
-                        <p className="muted shop-size">{a.why}</p>
+                        <p className="muted shop-size">
+                          {lookText(a.look) ? `${lookText(a.look)}. ` : ''}
+                          {a.why}
+                        </p>
                         <button
                           className="btn primary"
                           disabled={!a.fits || busy || swapping}
@@ -302,7 +306,10 @@ export default function Alternatives({ roomId, piece, door, serverVersion, busy,
                             </p>
                           </>
                         )}
-                        <p className="muted shop-size">{a.why}</p>
+                        <p className="muted shop-size">
+                          {lookText(a.look) ? `${lookText(a.look)}. ` : ''}
+                          {a.why}
+                        </p>
                         <button
                           className="btn primary"
                           disabled={!a.fits || busy || swapping}

@@ -108,12 +108,14 @@ def ikea_search(obj):
         raise HTTPException(503, "Add ANTHROPIC_API_KEY to .env")
     product = obj.get("product") or {}
     prompt = ikea.prompt_for(label, product.get("title"), obj["size"], price, currency, obj.get("rgba"))
+    client = main.make_client(api_key)
     try:
-        products = ikea.find_products(main.make_client(api_key), prompt)
+        products = ikea.find_products(client, prompt)
     except AgentError as e:
         raise HTTPException(502, str(e))
     wanted = {
         "label": label, "size": obj["size"], "price": price, "currency": currency, "own_url": product.get("url"),
+        "obj": obj, "client": client,
     }
     items = ikea.shortlist(products, wanted)
     return {"items": items, "message": found_message(items, price, "on IKEA", ikea.MAX_RESULTS)}
@@ -135,7 +137,7 @@ def shops_search(obj):
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise HTTPException(503, "Add ANTHROPIC_API_KEY to .env")
-    wanted = {"label": label, "size": obj["size"], "price": price, "currency": currency, "rgba": obj.get("rgba")}
+    wanted = {"label": label, "size": obj["size"], "price": price, "currency": currency, "rgba": obj.get("rgba"), "obj": obj}
     try:
         items = shops.find_items(main.make_client(api_key), serp_key, wanted)
     except AgentError as e:
@@ -150,7 +152,7 @@ def fit_checked(room_id, name, items, limit):
     for item in items:
         problems = replace_problems(scene["room"], scene["objects"], item, name)
         alternatives.append({**item, "fits": not problems, "problems": problems})
-    alternatives.sort(key=lambda a: (not a["fits"], -(a["savings"] or 0), -a["similarity"], a["title"]))
+    alternatives.sort(key=lambda a: (not a["fits"], a.get("look") is None, -a["similarity"], -(a["savings"] or 0), a["title"]))
     return alternatives[:limit]
 
 

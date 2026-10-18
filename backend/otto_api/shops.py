@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 import anthropic
 import httpx
 
-from . import ikea
+from . import ikea, looks
 from .agent import MODEL, AgentError
 from .importer import guess_label
 
@@ -29,6 +29,7 @@ MAX_RESULTS = 6  # alternatives returned
 MAX_TEXT = 200  # characters of a listing's extra text sent to Claude
 MAX_TITLE = 120  # as for custom items
 MAX_LABEL = 40  # as for custom items
+MAX_QUERY = 6  # words of a search made from a title
 # Kids', baby and pet listings, by title or store name ("buybuy BABY", "Pottery Barn Kids").
 USED = re.compile(r"\b(?:refurbished|pre-owned|used)\b", re.I)
 KIDS = re.compile(r"\b(?:baby|babies|kids?|children'?s?|toddlers?|infants?|nursery|dolls?|pets?|dogs?|cats?)\b", re.I)
@@ -102,8 +103,22 @@ def query_colour(rgba) -> str | None:
     return None if placeholder else colour_word(rgba)
 
 
-def query_for(label: str, rgba) -> str:
-    """A short search, such as "gray loveseat". "furniture" is added when the label is not a known type."""
+def title_words(title) -> list[str]:
+    """The words of a product title for a search: the part before " - ", without brand-style ALL-CAPS words,
+    in lowercase. Empty if there is no title."""
+    if not isinstance(title, str):
+        return []
+    words = title.split(" - ")[0].split()
+    return [w.lower() for w in words if not (len(w) >= 2 and w.isalpha() and w.isupper())]
+
+
+def query_for(label: str, rgba, title=None) -> str:
+    """A short search, such as "gray loveseat" or, from the title "DYVLINGE Swivel chair - Kelinge black" and a
+    black colour, "black swivel chair" (at most MAX_QUERY words). Without a title, from the label, and
+    "furniture" is added when the label is not a known type."""
+    if found := title_words(title):
+        colour = query_colour(rgba)
+        return " ".join((([colour] if colour and colour not in found else []) + found)[:MAX_QUERY])
     label = label.strip().lower()[:MAX_LABEL]
     words = [query_colour(rgba), label]
     if guess_label(label) == "furniture" and "furniture" not in label:
@@ -342,10 +357,12 @@ def shortlist(listings: list[dict], estimates: dict[int, dict], wanted: dict) ->
 def find_items(client, serp_key: str, wanted: dict) -> list[dict]:
     """Items from other shops, without the fit check, in about BUDGET seconds for both calls.
 
-    wanted: label, size, price (or None), currency and rgba. Raise AgentError if a call fails."""
+    wanted: label, size, price (or None), currency, rgba and obj (the room object). The items are also judged by
+    their look, in the time left of BUDGET. Raise AgentError if a call fails."""
     deadline = time.monotonic() + BUDGET
     max_price = math.ceil(wanted["price"]) if wanted["price"] is not None else None  # the route passes USD prices only
-    results = search_listings(serp_key, query_for(wanted["label"], wanted["rgba"]), max_price, SERP_TIMEOUT)
+    title = ((wanted.get("obj") or {}).get("product") or {}).get("title")
+    results = search_listings(serp_key, query_for(wanted["label"], wanted["rgba"], title), max_price, SERP_TIMEOUT)
     listings = candidates(results, wanted["price"])
     if not listings:
         return []
@@ -353,4 +370,6 @@ def find_items(client, serp_key: str, wanted: dict) -> list[dict]:
     if left < MIN_CLAUDE:
         raise AgentError(TOO_LONG)
     estimates = estimates_of(ask(client, listings, left), len(listings))
-    return shortlist(listings, estimates, wanted)
+    items = shortlist(listings, estimates, wanted)
+    look_deadline = min(deadline, time.monotonic() + looks.BUDGET)
+    return looks.filter_items(client, wanted, items, ikea.look_colour(wanted["rgba"]), look_deadline)

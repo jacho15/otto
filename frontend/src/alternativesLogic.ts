@@ -22,6 +22,12 @@ export function estimatedSizeText(size: Vec3): string {
   return `about ${size.map((m) => Math.round(m * 100)).join(' × ')} cm (estimated)`
 }
 
+/** "Looks very similar" or "Looks similar" from the look score of an alternative. null when it was not judged. */
+export function lookText(look: number | null | undefined): string | null {
+  if (look == null) return null
+  return look >= 0.8 ? 'Looks very similar' : 'Looks similar'
+}
+
 /** The label of the IKEA search button. */
 export function ikeaButtonText(hasPrice: boolean, searching: boolean): string {
   if (searching) return 'Searching IKEA…'

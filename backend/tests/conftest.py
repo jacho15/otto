@@ -6,7 +6,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from otto_api import fetch
+from otto_api import fetch, looks
 from otto_api.main import app
 
 ROOM = "test-room"
@@ -88,6 +88,21 @@ def no_api_key(monkeypatch):
     """Tests never see a real key, even if the repo .env has one."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+
+
+@pytest.fixture
+def fake_looks(monkeypatch):
+    """score_looks without Claude or photos: fake_looks.looks maps a candidate title to its look. A title that
+    is not in it can't be judged. fake_looks.calls has what each call was given."""
+    state = SimpleNamespace(looks={}, calls=[])
+
+    def score_looks(client, original, candidates, deadline):
+        state.calls.append(SimpleNamespace(original=original, candidates=candidates, deadline=deadline))
+        found = [state.looks.get(c["title"]) for c in candidates]
+        return [None if look is None else {"look": look, "look_why": "Same shell shape."} for look in found]
+
+    monkeypatch.setattr(looks, "score_looks", score_looks)
+    return state
 
 
 @pytest.fixture

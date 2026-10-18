@@ -1,4 +1,5 @@
 import json
+import time
 from types import SimpleNamespace
 
 import anthropic
@@ -6,7 +7,7 @@ import httpx
 import pytest
 
 from conftest import ROOM
-from otto_api import main, shops
+from otto_api import looks, main, shops
 from otto_api.agent import AgentError
 from test_agent import FakeApi, text
 from test_custom import ITEM, ITEMS, objects
@@ -34,7 +35,7 @@ def report(*estimates):
 
 
 @pytest.fixture
-def shop_api(client, monkeypatch):
+def shop_api(client, monkeypatch, fake_looks):
     """Run the shops route against a fake SerpApi and a FakeApi. Returns run(api, results); shop_api.calls has the SerpApi requests."""
     monkeypatch.setenv("SERPAPI_API_KEY", SECRET)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
@@ -163,6 +164,32 @@ def test_query():
     assert shops.query_for("thing", [0.1, 0.2, 0.9, 1]) == "blue thing furniture"
     assert shops.query_for("sofa", None) == "sofa"
     assert shops.colour_word([0.95, 0.95, 0.95]) == "white" and shops.colour_word([0.45, 0.28, 0.12]) == "brown"
+
+
+def test_the_query_is_built_from_the_title():
+    black = [0.05, 0.05, 0.05, 1]
+    assert shops.query_for("chair", black, "DYVLINGE Swivel chair - Kelinge black") == "black swivel chair"
+    assert shops.query_for("loveseat", black, "KLIPPAN Loveseat - Bomstad black") == "black loveseat"
+    assert shops.query_for("chair", [0.7, 0.7, 0.7, 1], "LÖMSK PS Swivel chair - Kelinge") == "swivel chair"  # placeholder colour
+    assert shops.query_for("chair", None, "IKEA Armchair") == "armchair"
+    assert shops.query_for("chair", black, "Black swivel chair") == "black swivel chair"
+    assert shops.query_for("chair", black, "a b c d e f g h") == "black a b c d e"  # at most six words
+
+
+def test_the_query_falls_back_to_the_label_without_a_usable_title():
+    for title in (None, "", "   ", "KLIPPAN - Bomstad black", "IKEA", 7):
+        assert shops.query_for("loveseat", [0.5, 0.5, 0.5, 1], title) == "gray loveseat"
+
+
+def test_the_search_uses_the_title_of_the_room_object(shop_api, data_dir):
+    path = data_dir / "rooms" / ROOM / "scene.json"
+    scene = json.loads(path.read_text("utf-8"))
+    chair = next(o for o in scene["objects"] if o["name"] == "chair")
+    chair["product"]["title"] = "DYVLINGE Swivel chair - Kelinge black"
+    chair["rgba"] = [0.05, 0.05, 0.05, 1]
+    path.write_text(json.dumps(scene), "utf-8")
+    shop_api(FakeApi([[report(estimate(0))]]), [listing()])
+    assert shop_api.state.calls[0].url.params["q"] == "black swivel chair"
 
 
 def test_the_placeholder_colour_is_not_searched():
@@ -552,3 +579,58 @@ def test_price_source_defaults_to_page_and_is_checked(client):
 def test_catalog_objects_have_no_price_source(client):
     r = client.post(f"/api/rooms/{ROOM}/objects", json={"catalog_id": "small-chair"})
     assert "price_source" not in objects(client)[r.json()["added"]]["product"]
+
+
+# --- looks ---
+
+def test_poor_looks_are_dropped_and_the_rest_blended_with_the_size(shop_api, fake_looks):
+    fake_looks.looks = {"GOOD chair": 0.8, "BAD chair": 0.3}
+    api = FakeApi([[report(estimate(0), estimate(1))]])
+    r = shop_api(api, [listing("GOOD chair", 40, path="good"), listing("BAD chair", 30, path="bad")])
+    assert titles(r) == ["GOOD chair"]
+    alt = r.json()["alternatives"][0]
+    assert alt["look"] == 0.8 and alt["similarity"] == 0.87  # 0.65 * 0.8 + 0.35 * 1.0
+    assert alt["why"] == "Same shell shape. A chair, size from the title."
+
+
+def test_pieces_that_could_not_be_judged_are_left_out_when_one_is_judged(shop_api, fake_looks):
+    fake_looks.looks = {"GOOD chair": 0.8}
+    api = FakeApi([[report(estimate(0), estimate(1))]])
+    r = shop_api(api, [listing("GOOD chair", 40, path="good"), listing("OTHER chair", 30, path="other")])
+    assert titles(r) == ["GOOD chair"]
+
+
+def test_pieces_are_kept_when_none_could_be_judged(shop_api, fake_looks):
+    api = FakeApi([[report(estimate(0), estimate(1))]])
+    r = shop_api(api, [listing("GOOD chair", 40, path="good"), listing("OTHER chair", 30, path="other")])
+    assert {a["title"]: a["look"] for a in r.json()["alternatives"]} == {"GOOD chair": None, "OTHER chair": None}
+
+
+def test_pieces_that_could_not_be_judged_are_left_out_when_three_look_right(shop_api, fake_looks):
+    fake_looks.looks = {"A chair": 0.9, "B chair": 0.6, "C chair": 0.5}
+    api = FakeApi([[report(*[estimate(i) for i in range(4)])]])
+    r = shop_api(api, [listing(f"{n} chair", 40, path=n) for n in ("A", "B", "C", "U")])
+    assert sorted(titles(r)) == ["A chair", "B chair", "C chair"]
+
+
+def test_the_look_step_gets_the_original_the_shortlist_and_a_short_deadline(shop_api, fake_looks):
+    api = FakeApi([[report(estimate(0), estimate(1, label="table"))]])
+    shop_api(api, [listing("GOOD chair", path="good"), listing("A table", path="table")])
+    (call,) = fake_looks.calls
+    assert call.original["title"] == "chair" and call.original["image"] is None
+    assert [c["title"] for c in call.candidates] == ["GOOD chair"]
+    assert call.candidates[0]["image_url"] == "https://encrypted-tbn0.gstatic.com/x.jpg"
+    assert 0 < call.deadline - time.monotonic() <= looks.BUDGET
+
+
+def test_the_look_step_stays_inside_the_route_deadline(monkeypatch, fake_looks):
+    now = [1000.0]
+    monkeypatch.setattr(shops, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    monkeypatch.setattr(looks, "time", SimpleNamespace(monotonic=lambda: now[0]))
+    monkeypatch.setattr(shops, "search_listings", lambda *args: (now.__setitem__(0, now[0] + 10), [listing()])[1])
+    monkeypatch.setattr(shops, "ask", lambda client, listings, timeout: (now.__setitem__(0, now[0] + 25), SimpleNamespace(
+        stop_reason="tool_use", content=[SimpleNamespace(type="tool_use", name="report_sizes", input={"estimates": [estimate(0)]})],
+    ))[1])
+    wanted = {"label": "chair", "size": [0.6, 0.6, 0.8], "price": None, "currency": "USD", "rgba": None, "obj": {}}
+    shops.find_items(object(), SECRET, wanted)
+    assert fake_looks.calls[0].deadline == 1000 + 45  # 10 s left, less than the 15 s of the look step

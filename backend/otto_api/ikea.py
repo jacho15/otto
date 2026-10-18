@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 import anthropic
 
+from . import looks
 from .agent import MODEL, AgentError
 from .fetch import MAX_PAGE, fetch
 from .importer import guess_label, parse_product
@@ -91,6 +92,12 @@ def colour_of(rgba) -> str | None:
     except (TypeError, ValueError):
         return None
     return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def look_colour(rgba) -> str | None:
+    """The colour of a piece for the look check. None for the stand-in colour of IKEA, shop and custom items."""
+    placeholder = isinstance(rgba, (list, tuple)) and list(rgba[:3]) == RGBA[:3]
+    return None if placeholder else colour_of(rgba)
 
 
 def prompt_for(label, title, size, price, currency, rgba) -> str:
@@ -269,8 +276,10 @@ def words(text: str) -> str:
 def shortlist(products: list[dict], wanted: dict) -> list[dict]:
     """Items (same fields as catalog alternatives, minus the fit check) from Claude's products.
 
-    wanted: label, size, price (or None), currency and own_url (the piece's own page, or None).
+    wanted: label, size, price (or None), currency and own_url (the piece's own page, or None). With obj (the
+    room object) and client, the items are also judged by their look, in the time left of BUDGET.
     """
+    start = time.monotonic()
     own = url_key(wanted["own_url"]) if wanted["own_url"] else None
     urls, why, seen = [], {}, set()
     for p in products:
@@ -319,4 +328,6 @@ def shortlist(products: list[dict], wanted: dict) -> list[dict]:
             "savings": round(wanted["price"] - price, 2) if saves else None,
             "savings_pct": round((wanted["price"] - price) / wanted["price"] * 100) if saves else None,
         })
-    return items
+    deadline = min(time.monotonic() + looks.BUDGET, start + BUDGET)
+    colour = look_colour((wanted.get("obj") or {}).get("rgba"))
+    return looks.filter_items(wanted.get("client"), wanted, items, colour, deadline)

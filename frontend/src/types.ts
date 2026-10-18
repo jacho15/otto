@@ -311,6 +311,7 @@ export interface IkeaAlternative {
   savings_pct: number | null // whole percent
   fits: boolean
   problems: string[]
+  look: number | null // 0 to 1: how much it looks like the piece, from photos. null when it could not be judged
 }
 
 export interface IkeaResult {
@@ -345,6 +346,7 @@ export interface ShopAlternative {
   price_note: string
   fits: boolean
   problems: string[]
+  look: number | null // 0 to 1: how much it looks like the piece, from photos. null when it could not be judged
 }
 
 export interface ShopResult {

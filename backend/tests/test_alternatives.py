@@ -81,6 +81,19 @@ def test_sort_fits_first_then_savings_then_title(client, chairs):
     assert ids == ["alt-chair", "budget-chair", "cheap-chair", "huge-chair", "wide-chair", "tall-chair"]
 
 
+def test_judged_alternatives_come_before_unjudged_ones(client, monkeypatch):
+    from otto_api import alternatives
+    monkeypatch.setattr(alternatives, "load_visible", lambda room_id, name: ({"room": None, "objects": []}, None))
+    monkeypatch.setattr(alternatives, "replace_problems", lambda room, objects, item, name: [])
+
+    def alt(title, similarity, look, savings=0):
+        return {"title": title, "similarity": similarity, "look": look, "savings": savings}
+
+    items = [alt("U", 0.9, None), alt("B", 0.6, 0.5), alt("A", 0.6, 0.5, savings=5), alt("C", 0.7, 0.8)]
+    assert [a["title"] for a in alternatives.fit_checked("room", "chair", items, 10)] == ["C", "A", "B", "U"]
+    assert [a["title"] for a in alternatives.fit_checked("room", "chair", items, 2)] == ["C", "A"]
+
+
 def test_excludes_own_catalog_item(client, data_dir, chairs):
     path = data_dir / "rooms" / ROOM / "scene.json"
     scene = json.loads(path.read_text("utf-8"))
