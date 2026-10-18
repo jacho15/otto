@@ -1,9 +1,9 @@
 # otto on Photon
 
-Text otto a photo of a piece of furniture. It replies with the closest pieces from the shop, each with a
-picture, price, size and whether it fits your room. Reply 1, 2 or 3 and it puts that piece in your room and
-texts back a picture of the room, plus a link to open it in 3D. Reply `undo` to take it out, `rooms` to list
-your rooms and `room 2` to switch.
+Text otto a photo of a piece of furniture. It finds the closest piece in the shop, puts it in your room, and
+texts back its product photo and buy link, a picture of your room with it, and a short walk-around video at
+eye height. The other close matches follow, each with its photo, price, size and buy link. Reply 2 or 3 to swap,
+`keep` to keep it, `undo` to take it out, `rooms` to list your rooms and `room 2` to switch.
 
 On iMessage it runs on [Photon 2.0](https://photon.codes/docs/beta/get-started/imessage) (`@photon-ai/api`):
 it polls for received messages and replies with `sendMessage`, uploading pictures as attachments. For trying it
@@ -42,7 +42,6 @@ Optional settings, also in `.env`:
 
 - `OTTO_ROOM`: the room new chats start in (default `demo-living-room`)
 - `OTTO_API_URL`: otto's backend (default `http://localhost:8000`)
-- `OTTO_PUBLIC_URL`: where the "Open it in 3D" links point. Use a public address for phones (default `http://localhost:5173`).
 
 ## Tests
 

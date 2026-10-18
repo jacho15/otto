@@ -14,8 +14,9 @@ from fastapi import APIRouter, Form, HTTPException, UploadFile
 from .agent import MODEL, AgentError
 from .alternatives import replace_problems
 from .custom import MAX_IMAGE, file_kind
-from .ikea import closeness, label_family
-from .importer import LABELS
+from .fetch import IMAGE_ACCEPT, MAX_PAGE, BadUrl, FetchError, fetch
+from .ikea import closeness, ikea_host, label_family
+from .importer import LABELS, parse_product
 
 router = APIRouter()
 
@@ -171,8 +172,8 @@ def match_view(match: dict, room_scene: dict | None) -> dict:
     view = {
         "id": item["id"], "title": item["title"], "label": item["label"], "url": item["url"],
         "price": item["price"], "currency": item["currency"], "size": item["size"],
-        # newer catalog pieces can have no photo (they're drawn as stand-in shapes)
-        "photo_url": f"/api/catalog/files/{item['photo']}" if item.get("photo") else None,
+        # every piece gets a picture: its own photo, or its product photo fetched once from IKEA
+        "photo_url": f"/api/catalog/{item['id']}/photo",
         "score": match["score"], "why": match["why"],
     }
     if room_scene is not None:
@@ -208,3 +209,44 @@ def match_photo(file: UploadFile, room_id: str | None = Form(None)):
     if not matches:
         return {"features": features, "matches": [], "message": f"Nothing like that {features['type']} in the shop yet."}
     return {"features": features, "matches": matches, "message": f"Here are the {len(matches)} closest pieces."}
+
+
+PHOTO_TYPES = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp"}
+
+
+def product_photo_from_page(url: str) -> bytes:
+    """The product photo from a piece's IKEA page (its og:image). Raises FetchError, BadUrl or ValueError."""
+    page, _, _ = fetch(url, MAX_PAGE, allowed=ikea_host)
+    image_url = parse_product(page.decode("utf-8", errors="replace"), url).get("image_url")
+    if not image_url:
+        raise ValueError("no product photo on the page")
+    data, _, _ = fetch(image_url, MAX_IMAGE, IMAGE_ACCEPT, allowed=ikea_host)
+    return data
+
+
+@router.get("/api/catalog/{catalog_id}/photo")
+def catalog_photo(catalog_id: str):
+    """A catalog piece's picture. Pieces without a stored photo get the one from their IKEA page,
+    downloaded once and kept in data/catalog/photo-cache."""
+    from . import main
+    item = next((i for i in main.load_catalog() if i["id"] == catalog_id), None)
+    if item is None:
+        raise HTTPException(404, "Catalog item not found")
+    if item.get("photo"):
+        return main.serve_file(main.catalog_dir(), item["photo"])
+    cache = main.catalog_dir() / "photo-cache"
+    for ext in PHOTO_TYPES:
+        if (cache / f"{catalog_id}.{ext}").is_file():
+            return main.serve_file(cache, f"{catalog_id}.{ext}")
+    if not item.get("url") or not ikea_host(item["url"]):
+        raise HTTPException(404, "No photo for this piece")
+    try:
+        data = product_photo_from_page(item["url"])
+    except (FetchError, BadUrl, ValueError, RecursionError):
+        raise HTTPException(404, "No photo for this piece")
+    kind = file_kind(data)
+    if kind is None or kind[1] != "image" or len(data) > MAX_IMAGE:
+        raise HTTPException(404, "No photo for this piece")
+    cache.mkdir(parents=True, exist_ok=True)
+    (cache / f"{catalog_id}.{kind[0]}").write_bytes(data)
+    return main.serve_file(cache, f"{catalog_id}.{kind[0]}")

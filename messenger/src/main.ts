@@ -16,7 +16,6 @@ if (existsSync(envFile)) process.loadEnvFile(envFile)
 // The first of these names that is set wins.
 const env = (...names: string[]) => names.map((n) => process.env[n]).find((v) => v)
 const OTTO_API = env('OTTO_API_URL') ?? 'http://localhost:8000'
-const PUBLIC_URL = env('OTTO_PUBLIC_URL') ?? 'http://localhost:5173'
 const ROOM = env('OTTO_ROOM') ?? 'demo-living-room'
 const projectId = env('PHOTON_PROJECT_ID', 'Photon_Project_ID')
 const projectKey = env('PHOTON_API_KEY', 'Photon_FULL_API_KEY', 'Photon_Demo_API_KEY')
@@ -34,15 +33,15 @@ async function handle(key: string, outbox: Outbox, msg: Incoming) {
   const state = states.get(key) ?? newState(ROOM)
   const slow = msg.kind === 'photo' || intentOf(msg.text, state.matches.length).kind === 'choice'
   // The slow steps get one heads-up and typing dots, so the chat doesn't look stuck.
-  if (msg.kind === 'photo') await outbox.text('Love it. Finding the closest match and putting it in your room, give me about half a minute…')
+  if (msg.kind === 'photo') await outbox.text('Love it. Finding the closest match and putting it in your room. Give me about half a minute…')
   else if (slow) await outbox.text('Swapping it in, one moment…')
   if (slow) await outbox.typing(true)
   try {
-    const turn = await respond(otto, state, msg, PUBLIC_URL)
+    const turn = await respond(otto, state, msg)
     states.set(key, turn.state)
     for (const r of turn.replies) {
       if ('text' in r) await outbox.text(r.text)
-      else await outbox.image(r.image, r.mimeType, r.name)
+      else await outbox.image(r.media, r.mimeType, r.name)
     }
   } finally {
     if (slow) await outbox.typing(false)

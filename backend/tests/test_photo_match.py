@@ -103,7 +103,7 @@ def test_match_photo_returns_ranked_matches_and_sends_the_image(post):
     body = r.json()
     assert body["features"]["type"] == "armchair"
     assert [m["id"] for m in body["matches"]][0] == "white-armchair"
-    assert body["matches"][0]["photo_url"] == "/api/catalog/files/photos/white-armchair.jpg"
+    assert body["matches"][0]["photo_url"] == "/api/catalog/white-armchair/photo"
     assert "fits" not in body["matches"][0]  # no room given
     sent = api.body(0)
     assert sent["output_config"]["format"]["type"] == "json_schema"
@@ -113,10 +113,10 @@ def test_match_photo_returns_ranked_matches_and_sends_the_image(post):
     assert image["type"] == "image" and image["source"]["media_type"] == "image/jpeg"
 
 
-def test_match_photo_piece_without_a_photo_has_no_photo_url(post):
+def test_match_photo_every_piece_gets_a_photo_url(post):
     r = post(FakeApi([features_turn(WHITE_ARMCHAIR)]))
     by_id = {m["id"]: m for m in r.json()["matches"]}
-    assert by_id["no-photo-chair"]["photo_url"] is None
+    assert by_id["no-photo-chair"]["photo_url"] == "/api/catalog/no-photo-chair/photo"
 
 
 def test_match_photo_fit_checks_against_a_room(post):
@@ -171,3 +171,58 @@ def test_match_photo_model_failure_is_502(post):
 
 def test_max_matches_is_small_enough_for_a_text_reply():
     assert photo_match.MAX_MATCHES <= 3
+
+
+# ---- catalog photos ----
+
+PNG = b"\x89PNG\r\n\x1a\n" + bytes(32)
+
+
+@pytest.fixture
+def shop(client, data_dir, monkeypatch):
+    (data_dir / "catalog" / "photos").mkdir(parents=True, exist_ok=True)
+    (data_dir / "catalog" / "photos" / "white-armchair.jpg").write_bytes(JPEG)
+    monkeypatch.setattr(main, "load_catalog", lambda: CATALOG + [
+        {**item("off-site", "chair", (0.5, 0.5, 0.8), 10), "photo": None, "url": "https://example.com/p/x"},
+    ])
+    fetched = []
+
+    def from_page(url):
+        fetched.append(url)
+        return PNG
+
+    monkeypatch.setattr(photo_match, "product_photo_from_page", from_page)
+    return fetched
+
+
+def test_catalog_photo_serves_a_stored_photo(client, shop):
+    r = client.get("/api/catalog/white-armchair/photo")
+    assert r.status_code == 200 and r.content == JPEG
+    assert shop == []
+
+
+def test_catalog_photo_fetches_from_ikea_once_then_caches(client, shop, data_dir):
+    first = client.get("/api/catalog/no-photo-chair/photo")
+    assert first.status_code == 200 and first.content == PNG
+    assert first.headers["content-type"] == "image/png"
+    assert (data_dir / "catalog" / "photo-cache" / "no-photo-chair.png").is_file()
+    again = client.get("/api/catalog/no-photo-chair/photo")
+    assert again.content == PNG
+    assert shop == ["https://www.ikea.com/us/en/p/no-photo-chair/"]  # fetched once
+
+
+def test_catalog_photo_only_from_ikea_and_404_otherwise(client, shop, monkeypatch):
+    assert client.get("/api/catalog/off-site/photo").status_code == 404
+    assert client.get("/api/catalog/nope/photo").status_code == 404
+    assert shop == []
+
+    def broken(url):
+        raise photo_match.FetchError("down")
+
+    monkeypatch.setattr(photo_match, "product_photo_from_page", broken)
+    assert client.get("/api/catalog/no-photo-chair/photo").status_code == 404
+
+
+def test_catalog_photo_refuses_a_non_image(client, shop, monkeypatch):
+    monkeypatch.setattr(photo_match, "product_photo_from_page", lambda url: b"<html>not an image</html>")
+    assert client.get("/api/catalog/no-photo-chair/photo").status_code == 404

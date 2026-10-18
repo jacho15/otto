@@ -1,17 +1,19 @@
 // What otto says back in a text conversation. No Photon and no network here: otto's API is passed in,
 // and replies are plain values, so the whole flow can be tested.
 //
-// Send a photo  -> otto puts the closest piece in your room and sends a picture of it, with other options.
+// Send a photo  -> otto puts the closest piece in your room and sends its photo, a picture and a short
+//                   walk-around video of your room with it, and the other options with their photos.
 // Reply 2 or 3  -> swaps in that option instead. "keep" keeps it; "undo" takes it out.
 // "rooms" / "room 2" -> choose which room to try things in. Anything else is chat, and gets a short nudge.
 
 export interface Match {
   id: string
   title: string
+  url: string // where to buy it
   price: number
   currency: string
   size: [number, number, number]
-  photo_url: string | null // null for pieces without a product photo
+  photo_url: string | null // the product photo, on otto's API
   why: string
   fits?: boolean
   problems?: string[]
@@ -34,10 +36,13 @@ export interface Otto {
   addPiece(roomId: string, catalogId: string): Promise<string> // the new piece's name
   removePiece(roomId: string, name: string): Promise<void>
   renderRoom(roomId: string, select: string): Promise<Buffer> // PNG
+  renderTour(roomId: string, focus: string): Promise<Buffer> // MP4: a few seconds walking around the piece
+  fetchFile(url: string): Promise<Buffer>
   listRooms(): Promise<RoomSummary[]>
 }
 
-export type Reply = { text: string } | { image: Buffer; mimeType: string; name: string }
+/** Text, or a file to attach: a photo or a video. */
+export type Reply = { text: string } | { media: Buffer; mimeType: string; name: string }
 
 export interface Placed {
   roomId: string
@@ -123,11 +128,18 @@ export function money(amount: number, currency: string): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
 }
 
+/** A file's type from its first bytes. */
+export function mediaType(buf: Buffer): string {
+  if (buf[0] === 0x89 && buf[1] === 0x50) return 'image/png'
+  if (buf.subarray(0, 4).toString() === 'RIFF' && buf.subarray(8, 12).toString() === 'WEBP') return 'image/webp'
+  return 'image/jpeg'
+}
+
 const cm = (size: [number, number, number]) => size.map((v) => Math.round(v * 100)).join(' × ') + ' cm'
 
 export function matchLine(m: Match, n: number): string {
   const fit = m.fits === undefined ? '' : m.fits ? '' : ` · won't fit: ${(m.problems ?? [])[0]?.toLowerCase() ?? 'no space'}`
-  return `${n}. ${m.title}: ${money(m.price, m.currency)} · ${cm(m.size)}${fit}`
+  return `${n}. ${m.title}: ${money(m.price, m.currency)} · ${cm(m.size)}${fit}${m.url ? `\nBuy it: ${m.url}` : ''}`
 }
 
 /** "Demo Living Room" -> "your living room". */
@@ -147,19 +159,16 @@ export interface Turn {
   replies: Reply[]
 }
 
-/** One incoming message in, the new state and what to send back out. `publicUrl` is where the website lives. */
-export async function respond(otto: Otto, state: State, msg: Incoming, publicUrl: string): Promise<Turn> {
+/** One incoming message in, the new state and what to send back out. */
+export async function respond(otto: Otto, state: State, msg: Incoming): Promise<Turn> {
   try {
-    if (msg.kind === 'photo') return await onPhoto(otto, state, msg, publicUrl)
-    return await onText(otto, state, msg.text, publicUrl)
+    if (msg.kind === 'photo') return await onPhoto(otto, state, msg)
+    return await onText(otto, state, msg.text)
   } catch (e) {
     const reason = e instanceof Error ? e.message : String(e)
     return { state, replies: [{ text: `Something went wrong: ${reason}` }] }
   }
 }
-
-const link3d = (publicUrl: string, roomId: string, name: string) =>
-  `${publicUrl.replace(/\/$/, '')}/rooms/${encodeURIComponent(roomId)}?select=${encodeURIComponent(name)}`
 
 async function roomName(otto: Otto, roomId: string): Promise<string | undefined> {
   try {
@@ -169,48 +178,68 @@ async function roomName(otto: Otto, roomId: string): Promise<string | undefined>
   }
 }
 
-/** Put a match in the room (replacing the last trial piece) and picture it. */
-async function tryPiece(otto: Otto, state: State, m: Match): Promise<{ placed: Placed; picture: Reply | null }> {
-  if (state.placed && !state.placed.kept) await otto.removePiece(state.placed.roomId, state.placed.name)
-  const name = await otto.addPiece(state.roomId, m.id)
-  let picture: Reply | null = null
+/** The piece's product photo, or nothing if it can't be had. */
+async function productPhoto(otto: Otto, m: Match): Promise<Reply | null> {
+  if (!m.photo_url) return null
   try {
-    picture = { image: await otto.renderRoom(state.roomId, name), mimeType: 'image/png', name: 'your-room.png' }
+    const bytes = await otto.fetchFile(m.photo_url)
+    const mimeType = mediaType(bytes)
+    return { media: bytes, mimeType, name: `${m.id}.${mimeType.split('/')[1]}` }
   } catch {
-    // the piece is in the room either way; the text says so
+    return null
   }
-  return { placed: { roomId: state.roomId, name, matchId: m.id, title: m.title, kept: false }, picture }
 }
 
-async function onPhoto(otto: Otto, state: State, msg: Extract<Incoming, { kind: 'photo' }>, publicUrl: string): Promise<Turn> {
+/** Put a match in the room (replacing the last trial piece), then picture and film it, both at once. */
+async function tryPiece(otto: Otto, state: State, m: Match): Promise<{ placed: Placed; picture: Reply | null; tour: Reply | null }> {
+  if (state.placed && !state.placed.kept) await otto.removePiece(state.placed.roomId, state.placed.name)
+  const name = await otto.addPiece(state.roomId, m.id)
+  // either can fail on its own; the piece is in the room regardless and the text says so
+  const [picture, tour] = await Promise.all([
+    otto.renderRoom(state.roomId, name).then((b): Reply => ({ media: b, mimeType: 'image/png', name: 'your-room.png' }), () => null),
+    otto.renderTour(state.roomId, name).then((b): Reply => ({ media: b, mimeType: 'video/mp4', name: 'walk-around.mp4' }), () => null),
+  ])
+  return { placed: { roomId: state.roomId, name, matchId: m.id, title: m.title, kept: false }, picture, tour }
+}
+
+async function onPhoto(otto: Otto, state: State, msg: Extract<Incoming, { kind: 'photo' }>): Promise<Turn> {
   if (!msg.mimeType.startsWith('image/')) return { state, replies: [{ text: "Send a photo (JPEG, PNG or WebP) and I'll look for it." }] }
   const result = await otto.matchPhoto(await msg.read(), msg.mimeType, state.roomId)
   if (!result.matches.length) return { state: { ...state, matches: [], greeted: true }, replies: [{ text: result.message }] }
 
   const [best, ...others] = result.matches
-  const { placed, picture } = await tryPiece(otto, state, best)
-  const where = roomPhrase(await roomName(otto, state.roomId))
+  const [{ placed, picture, tour }, bestPhoto, otherPhotos, name] = await Promise.all([
+    tryPiece(otto, state, best),
+    productPhoto(otto, best),
+    Promise.all(others.map((m) => productPhoto(otto, m))),
+    roomName(otto, state.roomId),
+  ])
+  const where = roomPhrase(name)
   const desc = result.features.description.replace(/^(a|an)\s+/i, '')
   const fit = best.fits === false ? ` Heads up: it ${(best.problems ?? ['may not fit'])[0].toLowerCase()}.` : ''
   const replies: Reply[] = [
-    { text: `That looks like ${article(desc)} ${desc}. The closest I have is the ${best.title} (${money(best.price, best.currency)}, ${cm(best.size)}).${fit}` },
+    { text: `That looks like ${article(desc)} ${desc}. The closest I have is the ${best.title}: ${money(best.price, best.currency)} · ${cm(best.size)}.${fit}${best.url ? `\nBuy it: ${best.url}` : ''}` },
   ]
+  if (bestPhoto) replies.push(bestPhoto)
+  if (picture || tour) replies.push({ text: `This is what it would look like in ${where}:` })
+  else replies.push({ text: `I put it in ${where}, but couldn't draw the room just now.` })
   if (picture) replies.push(picture)
-  const lines = [
-    picture ? `This is what it would look like in ${where}.` : `I put it in ${where}, but couldn't draw the room just now.`,
-    `Open it in 3D: ${link3d(publicUrl, state.roomId, placed.name)}`,
-  ]
+  if (tour) replies.push(tour)
   if (others.length) {
-    lines.push('', 'Other options:', ...others.map((m, i) => matchLine(m, i + 2)))
-    lines.push('', `Reply ${others.length === 1 ? '2' : '2 or 3'} to swap, "keep" to keep it, or "undo" to take it out.`)
+    replies.push({ text: 'Other options:' })
+    others.forEach((m, i) => {
+      replies.push({ text: matchLine(m, i + 2) })
+      const photo = otherPhotos[i]
+      if (photo) replies.push(photo)
+    })
+    replies.push({ text: `Reply ${others.length === 1 ? '2' : '2 or 3'} to swap, "keep" to keep it, or "undo" to take it out.` })
   } else {
-    lines.push('', 'Reply "keep" to keep it, or "undo" to take it out.')
+    replies.push({ text: 'Reply "keep" to keep it, or "undo" to take it out.' })
   }
-  replies.push({ text: lines.join('\n') })
   return { state: { ...state, matches: result.matches, placed, greeted: true }, replies }
 }
 
-async function onText(otto: Otto, state: State, raw: string, publicUrl: string): Promise<Turn> {
+async function onText(otto: Otto, state: State, raw: string): Promise<Turn> {
   const intent = intentOf(raw, state.matches.length)
 
   if (intent.kind === 'undo') {
@@ -246,14 +275,15 @@ async function onText(otto: Otto, state: State, raw: string, publicUrl: string):
     if (state.placed?.matchId === m.id && state.placed.roomId === state.roomId) {
       return { state, replies: [{ text: `The ${m.title} is already in your room.` }] }
     }
-    const { placed, picture } = await tryPiece(otto, state, m)
-    const where = roomPhrase(await roomName(otto, state.roomId))
+    const [{ placed, picture, tour }, name] = await Promise.all([tryPiece(otto, state, m), roomName(otto, state.roomId)])
+    const where = roomPhrase(name)
     const fit = m.fits === false ? ` Heads up: it ${(m.problems ?? ['may not fit'])[0].toLowerCase()}.` : ''
-    const replies: Reply[] = []
+    const shown = picture || tour
+    const replies: Reply[] = [
+      { text: `${shown ? `Here's the ${m.title} (${money(m.price, m.currency)}) in ${where}.` : `I put the ${m.title} in ${where}, but couldn't draw the room just now.`}${fit}` },
+    ]
     if (picture) replies.push(picture)
-    replies.push({
-      text: `${picture ? `Here's the ${m.title} (${money(m.price, m.currency)}) in ${where}.` : `I put the ${m.title} in ${where}, but couldn't draw the room just now.`}${fit}\nOpen it in 3D: ${link3d(publicUrl, state.roomId, placed.name)}`,
-    })
+    if (tour) replies.push(tour)
     return { state: { ...state, placed }, replies }
   }
 
