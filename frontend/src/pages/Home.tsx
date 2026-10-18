@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { createRoom, getStory, listRooms } from '../api'
+import { createRoom, listRooms } from '../api'
 import { errorText } from '../checkoutLogic'
 import { checkDimension, rangeText } from '../placeLogic'
 import type { Unit } from '../placeLogic'
@@ -12,19 +12,9 @@ export default function Home() {
   const [rooms, setRooms] = useState<RoomSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const [stories, setStories] = useState<RoomSummary[]>([])
-
   useEffect(() => {
     listRooms().then(setRooms, (e: Error) => setError(e.message))
   }, [])
-
-  // Scanned rooms that come with a "How this room was made" page.
-  useEffect(() => {
-    const scans = (rooms ?? []).filter((r) => r.kind === 'scan')
-    Promise.all(scans.map((r) => getStory(r.id).then((s) => (s ? r : null), () => null))).then((found) =>
-      setStories(found.filter((r): r is RoomSummary => r !== null)),
-    )
-  }, [rooms])
 
   return (
     <div className="home">
@@ -57,7 +47,7 @@ export default function Home() {
             ))}
           </ul>
         )}
-        {stories.map((r) => (
+        {(rooms ?? []).filter((r) => r.has_story).map((r) => (
           <p key={r.id} className="home-links">
             <Link className="text-link" to={`/rooms/${encodeURIComponent(r.id)}/how-it-was-made`}>
               See how {r.name} was made from a phone video

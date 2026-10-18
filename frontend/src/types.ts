@@ -61,6 +61,7 @@ export interface Room {
   total: Total
   totals: Money[]
   can_undo: boolean
+  has_story: boolean // has a "How this room was made" page
   door: Door
 }
 
@@ -96,6 +97,7 @@ export interface RoomSummary {
   size_xy: Vec2
   object_count: number
   kind: 'blueprint' | 'scan'
+  has_story: boolean
 }
 
 export interface MandateInput {
@@ -298,7 +300,6 @@ export interface ScanStory {
   tracked_frames: number
   points: number
   pipeline: {
-    gpu: string
     minutes: { depth: number; tracking: number; models: number }
     sizes_mb: { phone_video: number; uploaded: number; results: number; room: number }
   }

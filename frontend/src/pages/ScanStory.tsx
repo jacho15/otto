@@ -55,7 +55,7 @@ export default function ScanStory() {
             <Stat value={`${story.video.seconds} s`} label={`phone video, ${story.video.frames} frames`} />
             <Stat value={String(story.candidates)} label="furniture candidates found" />
             <Stat value={String(story.kept)} label="pieces in the final room" />
-            <Stat value={`~${p.minutes.depth + p.minutes.tracking + p.minutes.models} min`} label={`on one ${p.gpu}`} />
+            <Stat value={`~${p.minutes.depth + p.minutes.tracking + p.minutes.models} min`} label="of GPU time on a lab server" />
             <Link className="btn primary" to={roomLink}>Open the room in 3D</Link>
             <p className="story-note">People who happened to be in the video are blurred.</p>
           </div>
