@@ -8,6 +8,13 @@ Website work only. The video-to-room pipeline is being built on a separate branc
 - [x] React 3D room editor: select, drag, Q/E rotate, Delete removes, red warnings, price total
 - [x] Demo room with 5 IKEA pieces
 
+## New place (design a new home)
+- [x] Create an empty blueprint room from typed width, depth and ceiling height (m or ft)
+- [x] "Liked at the showroom" list: save IKEA pieces you like (picked from the catalog for now)
+- [x] Claude design agent: lays out your liked pieces in the blueprint, finds free spots itself, keeps walkways, backs sofas and desks onto walls facing into the room, and may suggest extras within budget
+- [x] Design tab in the room view, with the agent's explanation and the list of changes
+- [ ] Keep the agent's reply to 2–4 sentences (it sometimes runs longer)
+
 ## 1. Shop
 - [x] `catalog.json` with 5 IKEA products (title, URL, price, size W×D×H, photo)
 - [x] Catalog panel in the room view: product cards with photo, price, size and shop link

@@ -1,11 +1,14 @@
 import type {
   AddResult,
   CatalogItem,
+  DesignResult,
   Mandate,
   MandateInput,
+  NewRoomInput,
   Order,
   Room,
   RoomSummary,
+  SavedItem,
   Vec2,
 } from './types'
 
@@ -88,6 +91,22 @@ export const approveOrder = (id: string, oid: string) =>
 
 export const cancelOrder = (id: string, oid: string) =>
   request<Order>(`${orderUrl(id)}/${encodeURIComponent(oid)}/cancel`, { method: 'POST' })
+
+export const createRoom = (input: NewRoomInput) => request<Room>('/api/rooms', { method: 'POST', ...json(input) })
+
+export const listSaved = () => request<SavedItem[]>('/api/saved')
+
+export const saveItem = (catalogId: string, note?: string) =>
+  request<SavedItem[]>('/api/saved', { method: 'POST', ...json({ catalog_id: catalogId, note: note || undefined }) })
+
+export const unsaveItem = (catalogId: string) =>
+  request<SavedItem[]>(`/api/saved/${encodeURIComponent(catalogId)}`, { method: 'DELETE' })
+
+export const agentDesign = (id: string, instruction: string) =>
+  request<DesignResult>(`/api/rooms/${encodeURIComponent(id)}/agent/design`, {
+    method: 'POST',
+    ...json({ instruction }),
+  })
 
 export const catalogFileUrl = (path: string) => `/api/catalog/files/${path.split('/').map(encodeURIComponent).join('/')}`
 

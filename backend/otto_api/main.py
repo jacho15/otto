@@ -19,11 +19,13 @@ from .agent import AgentError, make_client, run_checkout
 from .checkout import MockVisaProvider, approval_violations
 from .fit import find_warnings
 from .place import add_item
+from .places import router as places_router
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 load_dotenv(REPO_ROOT / ".env")
 
 app = FastAPI(title="Otto API")
+app.include_router(places_router)
 
 
 @app.exception_handler(RequestValidationError)
@@ -95,7 +97,9 @@ def room_dir(room_id: str) -> Path:
     return rooms_dir() / room_id
 
 
-def room_name(room_id: str) -> str:
+def room_name(room_id: str, kind: str = "scan") -> str:
+    if kind == "blueprint":
+        room_id = re.sub(r"-[0-9a-f]{6}$", "", room_id)
     return room_id.replace("-", " ").title()
 
 
@@ -125,7 +129,7 @@ def room_response(room_id: str, scene: dict) -> dict:
     currency = next((p["currency"] for p in products if p.get("currency")), "USD")
     return {
         "id": room_id,
-        "name": room_name(room_id),
+        "name": room_name(room_id, scene["room"].get("kind", "scan")),
         "room": scene["room"],
         "objects": objects,
         "warnings": find_warnings(scene["room"], objects),
@@ -205,9 +209,11 @@ def list_rooms():
             if ROOM_ID.match(d.name) and (d / "scene.json").is_file():
                 with lock:
                     scene = load_scene(d.name)
+                kind = scene["room"].get("kind", "scan")
                 result.append({
                     "id": d.name,
-                    "name": room_name(d.name),
+                    "name": room_name(d.name, kind),
+                    "kind": kind,
                     "size_xy": scene["room"]["size_xy"],
                     "object_count": len([o for o in scene["objects"] if not o.get("hidden")]),
                 })

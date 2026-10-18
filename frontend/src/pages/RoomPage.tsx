@@ -8,6 +8,7 @@ import { mergeServerObjects } from '../saveLogic'
 import type { Order, Room, RoomObject, Vec2 } from '../types'
 import { useSaveQueue } from '../useSaveQueue'
 import Checkout from './Checkout'
+import DesignPanel from './DesignPanel'
 import { ErrorCard, itemCount } from './Home'
 import Shop from './Shop'
 
@@ -21,7 +22,7 @@ export default function RoomPage() {
   const [dragging, setDragging] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'room' | 'shop' | 'checkout'>('room')
+  const [tab, setTab] = useState<'room' | 'shop' | 'design' | 'checkout'>('room')
   const [adding, setAdding] = useState(false)
   const [orders, setOrders] = useState<Order[]>([])
   const draggingRef = useRef<string | null>(null)
@@ -207,15 +208,25 @@ export default function RoomPage() {
         <div className="tabs">
           <button className={tab === 'room' ? 'on' : ''} onClick={() => setTab('room')}>Room</button>
           <button className={tab === 'shop' ? 'on' : ''} onClick={() => setTab('shop')}>Shop</button>
+          <button className={tab === 'design' ? 'on' : ''} onClick={() => setTab('design')}>Design</button>
           <button className={tab === 'checkout' ? 'on' : ''} onClick={() => setTab('checkout')}>Checkout</button>
         </div>
         {saveError && <div className="save-error">{saveError}</div>}
+        <div hidden={tab !== 'design'}>
+          <DesignPanel
+            roomId={id}
+            onRoom={(r) => {
+              setRoom(r)
+              setObjects(r.objects)
+            }}
+          />
+        </div>
         <div hidden={tab !== 'checkout'}>
           <Checkout roomId={id} orders={orders} setOrders={setOrders} />
         </div>
         {tab === 'shop' ? (
           <Shop target={replaceTarget} busy={adding} onAdd={addPiece} />
-        ) : tab === 'checkout' ? null : (
+        ) : tab === 'checkout' || tab === 'design' ? null : (
           <>
           <ul className="item-list">
             {visible.map((o) => (

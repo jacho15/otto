@@ -14,7 +14,7 @@ def test_list_rooms(client):
     r = client.get("/api/rooms")
     assert r.status_code == 200
     assert r.json() == [
-        {"id": ROOM, "name": "Test Room", "size_xy": [5.0, 4.0], "object_count": 3}
+        {"id": ROOM, "name": "Test Room", "kind": "scan", "size_xy": [5.0, 4.0], "object_count": 3}
     ]
 
 

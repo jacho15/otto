@@ -65,6 +65,7 @@ export interface RoomSummary {
   name: string
   size_xy: Vec2
   object_count: number
+  kind: 'blueprint' | 'scan'
 }
 
 export interface MandateInput {
@@ -111,4 +112,30 @@ export interface Order {
   created_by: 'agent'
   agent_message: string
   payment: Payment | null
+}
+
+export interface NewRoomInput {
+  name: string
+  width: number // metres
+  depth: number
+  height: number
+}
+
+export interface SavedItem {
+  catalog_id: string
+  note: string
+  saved_at: string
+  item: CatalogItem
+}
+
+export interface DesignChange {
+  action: 'placed' | 'moved' | 'removed'
+  name: string
+  title: string
+}
+
+export interface DesignResult {
+  message: string
+  changes: DesignChange[]
+  room: Room
 }
