@@ -157,6 +157,26 @@ export interface DesignResult {
   room: Room
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  text: string
+  changes?: DesignChange[]
+}
+
+export interface ChatState {
+  messages: ChatMessage[]
+  prefs: string[]
+}
+
+export interface ChatReply {
+  reply: string
+  changes: DesignChange[]
+  prefs: string[]
+  room: Room
+  /** True when the request failed after some changes were saved. The reply says so. */
+  partial?: boolean
+}
+
 export interface Suggestion {
   catalog_id: string
   title: string

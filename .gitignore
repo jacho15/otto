@@ -12,6 +12,7 @@ data/custom/
 data/rooms/*/orders/
 data/rooms/*/history.json
 data/rooms/*/layouts.json
+data/rooms/*/chat.json
 data/rooms/*
 !data/rooms/demo-living-room/
 !data/rooms/scanned-lounge/

@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { addObject, formatPrice, getRoom, listCustomItems, listOrders, restoreLayout, saveLayout, undoRoom } from '../api'
+import { addObject, formatPrice, getRoom, listCustomItems, listOrders, restoreLayout, saveLayout, sendChat, undoRoom } from '../api'
 import { errorText, orderedNames } from '../checkoutLogic'
 import { dropIntent, type DropIntent } from '../furnitureLogic'
 import { findWarnings, warnedNames } from '../geometry'
 import RoomScene from '../scene/RoomScene'
 import { mergeServerObjects } from '../saveLogic'
 import { acceptError, previewObject } from '../suggestLogic'
-import type { CustomItem, Layout, Order, Room, RoomObject, Suggestion, Vec2 } from '../types'
+import type { ChatReply, CustomItem, Layout, Order, Room, RoomObject, Suggestion, Vec2 } from '../types'
 import { useSaveQueue } from '../useSaveQueue'
 import AddFurniture from './AddFurniture'
 import Alternatives from './Alternatives'
+import ChatPanel from './ChatPanel'
 import Checkout from './Checkout'
 import DesignPanel from './DesignPanel'
 import DoorSize from './DoorSize'
@@ -32,7 +33,7 @@ export default function RoomPage() {
   const [dragging, setDragging] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'room' | 'shop' | 'design' | 'checkout'>('room')
+  const [tab, setTab] = useState<'room' | 'shop' | 'design' | 'chat' | 'checkout'>('room')
   const [adding, setAdding] = useState(false)
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [orders, setOrders] = useState<Order[]>([])
@@ -40,6 +41,7 @@ export default function RoomPage() {
   const [dropping, setDropping] = useState(false) // something is being dragged over the 3D view
   const [drop, setDrop] = useState<(DropIntent & { id: number }) | null>(null)
   const [designRunning, setDesignRunning] = useState(false) // the design agent saves on the server outside the save queue
+  const [chatRunning, setChatRunning] = useState(false) // a chat request is running; undo would race with its changes
   const [serverVersion, setServerVersion] = useState(0) // bumped whenever a server response is applied
   const draggingRef = useRef<string | null>(null)
   const dragDepth = useRef(0)
@@ -49,6 +51,8 @@ export default function RoomPage() {
   const undoingRef = useRef(false)
   const replacingRef = useRef<string | null>(null)
   const addEpoch = useRef(0)
+  const idRef = useRef(id) // the room on screen, so a slow chat reply for another room is ignored
+  idRef.current = id
   const objectsRef = useRef(objects)
   objectsRef.current = objects
 
@@ -195,6 +199,25 @@ export default function RoomPage() {
     })
   }, [id, exclusive, applyRoom])
 
+  // Sends a chat message once pending saves have landed, then applies the room it returns.
+  const chatSend = useCallback(
+    (text: string) =>
+      new Promise<ChatReply>((resolve, reject) => {
+        exclusive(async () => {
+          try {
+            const r = await sendChat(id, text)
+            if (idRef.current === id) applyRoom(r.room)
+            resolve(r)
+          } catch (e) {
+            // The agent may have saved changes before it failed, so refresh the room.
+            await getRoom(id).then((r) => idRef.current === id && applyRoom(r), () => {})
+            reject(e)
+          }
+        })
+      }),
+    [id, exclusive, applyRoom],
+  )
+
   // Resolves to an error message, or null on success.
   const loadLayout = useCallback(
     (lid: string) =>
@@ -279,6 +302,7 @@ export default function RoomPage() {
   }
 
   const canUndo = !!room?.can_undo
+  const agentRunning = designRunning || chatRunning
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -288,7 +312,7 @@ export default function RoomPage() {
       if (document.querySelector('[role="dialog"]')) return
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'z') {
         e.preventDefault()
-        if (!draggingRef.current && canUndo && !working && !designRunning) undo()
+        if (!draggingRef.current && canUndo && !working && !agentRunning) undo()
         return
       }
       if (t instanceof HTMLSelectElement || t instanceof HTMLButtonElement) return
@@ -312,7 +336,7 @@ export default function RoomPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selected, tab, save, updateObject, canUndo, working, designRunning, undo])
+  }, [selected, tab, save, updateObject, canUndo, working, agentRunning, undo])
 
   const sizeXY = room?.room.size_xy
   const warned = useMemo(() => (sizeXY ? warnedNames(findWarnings(objects, sizeXY)) : new Set<string>()), [objects, sizeXY])
@@ -380,7 +404,7 @@ export default function RoomPage() {
             <h1 className="panel-title">{room.name}</h1>
             <button
               className="btn"
-              disabled={!room.can_undo || working || designRunning || dragging !== null}
+              disabled={!room.can_undo || working || agentRunning || dragging !== null}
               title="Undo the last change (Ctrl+Z)"
               onClick={undo}
             >
@@ -397,6 +421,7 @@ export default function RoomPage() {
           <button className={tab === 'room' ? 'on' : ''} onClick={() => setTab('room')}>Room</button>
           <button className={tab === 'shop' ? 'on' : ''} onClick={() => setTab('shop')}>Shop</button>
           <button className={tab === 'design' ? 'on' : ''} onClick={() => setTab('design')}>Design</button>
+          <button className={tab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>Chat</button>
           <button className={tab === 'checkout' ? 'on' : ''} onClick={() => setTab('checkout')}>Checkout</button>
         </div>
         {saveError && <div className="save-error">{saveError}</div>}
@@ -410,6 +435,9 @@ export default function RoomPage() {
               setServerVersion((v) => v + 1)
             }}
           />
+        </div>
+        <div hidden={tab !== 'chat'}>
+          <ChatPanel roomId={id} active={tab === 'chat'} onSend={chatSend} onRunning={setChatRunning} />
         </div>
         <div hidden={tab !== 'checkout'}>
           <Checkout roomId={id} orders={orders} setOrders={setOrders} />
@@ -437,7 +465,7 @@ export default function RoomPage() {
         </div>
         {tab === 'shop' ? (
           <Shop room={room.room} door={room.door} objects={objects} target={replaceTarget} busy={adding} onAdd={addPiece} />
-        ) : tab === 'checkout' || tab === 'design' ? null : (
+        ) : tab === 'checkout' || tab === 'design' || tab === 'chat' ? null : (
           <>
           {selectedObj?.movable && selectedObj.product?.price != null && (
             <Alternatives

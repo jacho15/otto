@@ -20,6 +20,7 @@ from .agent import AgentError, make_client, run_checkout
 from .checkout import MockVisaProvider, approval_violations
 from .fit import find_warnings
 from .alternatives import router as alternatives_router
+from .chat import router as chat_router
 from .custom import router as custom_router
 from .extension_api import router as extension_router
 from .place import add_at, add_item
@@ -35,6 +36,7 @@ app.include_router(suggest_router)
 app.include_router(alternatives_router)
 app.include_router(custom_router)
 app.include_router(extension_router)
+app.include_router(chat_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"^chrome-extension://[a-p]{32}$",

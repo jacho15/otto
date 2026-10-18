@@ -2,6 +2,8 @@ import type {
   AddResult,
   AlternativesResult,
   CatalogItem,
+  ChatReply,
+  ChatState,
   CustomItem,
   DesignResult,
   Layout,
@@ -142,6 +144,19 @@ export const agentDesign = (id: string, instruction: string) =>
     method: 'POST',
     ...json({ instruction }),
   })
+
+const chatUrl = (id: string) => `/api/rooms/${encodeURIComponent(id)}/chat`
+
+export const getChat = (id: string) => request<ChatState>(chatUrl(id))
+
+/** Can take up to a minute. The server answers 503 without an API key and 502 on an API error. */
+export const sendChat = (id: string, text: string) =>
+  request<ChatReply>(chatUrl(id), { method: 'POST', ...json({ text }) })
+
+export const clearChat = (id: string) => request<ChatState>(chatUrl(id), { method: 'DELETE' })
+
+export const deletePref = (id: string, index: number) =>
+  request<Pick<ChatState, 'prefs'>>(`${chatUrl(id)}/prefs/${index}`, { method: 'DELETE' })
 
 export const agentSuggest = (id: string, instruction: string) =>
   request<SuggestResult>(`/api/rooms/${encodeURIComponent(id)}/agent/suggest`, {

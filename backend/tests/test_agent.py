@@ -68,6 +68,7 @@ class FakeApi:
         if self.before:
             self.before(len(self.requests) - 1)
         content = self.turns[min(len(self.requests), len(self.turns)) - 1]
+        self.check_args(json.loads(request.content), content)
         stop = self.stop_reason or ("tool_use" if any(b["type"] == "tool_use" for b in content) else "end_turn")
         if json.loads(request.content).get("stream"):
             return httpx2.Response(
@@ -78,6 +79,20 @@ class FakeApi:
             "content": content, "stop_reason": stop, "stop_sequence": None,
             "usage": {"input_tokens": 1, "output_tokens": 1},
         })
+
+    @staticmethod
+    def check_args(body, content):
+        """Scripted tool calls must use the argument names in that tool's schema, as the real API enforces.
+
+        Catches a tool function whose parameter names drift from its input_schema.
+        """
+        schemas = {t["name"]: t.get("input_schema") for t in body.get("tools", []) if "name" in t}
+        for block in content:
+            schema = schemas.get(block.get("name")) if block.get("type") == "tool_use" else None
+            if not schema or "properties" not in schema:
+                continue
+            unknown = set(block["input"]) - set(schema["properties"])
+            assert not unknown, f"{block['name']} called with {sorted(unknown)}, not in its schema {sorted(schema['properties'])}"
 
     def client(self):
         return anthropic.Anthropic(

@@ -60,11 +60,11 @@ Like "Frequently bought together", but for your room, and you see it live.
 - [x] Suggestions come from real product data (catalog), never invented prices
 
 ## 5. AI assistant (Claude)
-- [ ] Chat panel in the room view
-- [ ] Tools: read a product link, place, move, remove, check fit, find alternatives
-- [ ] Budget and style preferences, shown as removable chips
-- [ ] Room refreshes live after the assistant makes changes
-- [ ] Treat page text as data: never follow instructions found on product pages
+- [x] Chat panel in the room view
+- [x] Tools: read a product link, place, move, remove, check fit, find alternatives
+- [x] Budget and style preferences, shown as removable chips
+- [x] Room refreshes live after the assistant makes changes (and every change can be undone)
+- [x] Treat page text as data: never follow instructions found on product pages (only parsed fields reach the assistant)
 
 ## 6. Agentic checkout (Visa track)
 - [x] Spend mandate set only by the user: per-item cap, order total cap, allowed shops (matched by URL host), expiry date; saving it issues a mock agent token

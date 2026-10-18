@@ -250,31 +250,33 @@ def spots_for(room_id, catalog_id, near, against_wall):
     return json.dumps(candidate_spots(scene["room"], scene["objects"], item["size"], target, against_wall))
 
 
+def visible(scene):
+    return [o for o in scene["objects"] if not o.get("hidden")]
+
+
+def check_spot(scene, size, x, y, yaw, skip=None):
+    """Raise ToolError unless the footprint is inside the walls and clear of visible pieces."""
+    corners = footprint_corners((x, y), size, math.radians(yaw))
+    room = scene["room"]
+    if outside_walls(corners, room["size_xy"]):
+        hx, hy = room["size_xy"][0] / 2, room["size_xy"][1] / 2
+        raise ToolError(f"Rejected: the piece crosses a wall. Keep it within x +-{hx} and y +-{hy}.")
+    for o in visible(scene):
+        if o["name"] != skip and footprints_overlap(corners, footprint_corners(o["pos"], o["size"], o["yaw"])):
+            raise ToolError(f"Rejected: the piece overlaps {o['name']}.")
+    bad = front_faces_wall(corners, room["size_xy"], yaw)
+    if bad:
+        raise ToolError(
+            f"Rejected: its front would face the wall at {bad[0]}. "
+            f"Use yaw_degrees={bad[1]} to put its back on that wall."
+        )
+
+
 def run_design(client, room_id, instruction):
     """Run the design agent once. Return {"message", "changes", "room"}."""
     from . import main
     placed = set()
     changes = []
-
-    def visible(scene):
-        return [o for o in scene["objects"] if not o.get("hidden")]
-
-    def check_fit(scene, size, x, y, yaw, skip=None):
-        """Raise ToolError unless the footprint is inside the walls and clear of visible pieces."""
-        corners = footprint_corners((x, y), size, math.radians(yaw))
-        room = scene["room"]
-        if outside_walls(corners, room["size_xy"]):
-            hx, hy = room["size_xy"][0] / 2, room["size_xy"][1] / 2
-            raise ToolError(f"Rejected: the piece crosses a wall. Keep it within x +-{hx} and y +-{hy}.")
-        for o in visible(scene):
-            if o["name"] != skip and footprints_overlap(corners, footprint_corners(o["pos"], o["size"], o["yaw"])):
-                raise ToolError(f"Rejected: the piece overlaps {o['name']}.")
-        bad = front_faces_wall(corners, room["size_xy"], yaw)
-        if bad:
-            raise ToolError(
-                f"Rejected: its front would face the wall at {bad[0]}. "
-                f"Use yaw_degrees={bad[1]} to put its back on that wall."
-            )
 
     @beta_tool(input_schema=NO_ARGS, strict=True)
     def get_room() -> str:
@@ -337,7 +339,7 @@ def run_design(client, room_id, instruction):
             item = main.find_item(catalog_id)
             if item is None:
                 raise ToolError(f"Unknown catalog id {catalog_id}. Use ids from get_catalog.")
-            check_fit(scene, item["size"], x, y, yaw_degrees)
+            check_spot(scene, item["size"], x, y, yaw_degrees)
             name = unique_name(item["id"], scene["objects"])
             scene["objects"].append(catalog_object(item, name, (x, y), math.radians(yaw_degrees)))
             main.save_scene(room_id, scene)
@@ -355,7 +357,7 @@ def run_design(client, room_id, instruction):
                 raise ToolError(f"No piece named {name}. Use names from get_room.")
             if not obj.get("movable", True):
                 raise ToolError(f"{name} is not movable.")
-            check_fit(scene, obj["size"], x, y, yaw_degrees, skip=name)
+            check_spot(scene, obj["size"], x, y, yaw_degrees, skip=name)
             obj["pos"] = [x, y, 0.0]
             obj["yaw"] = math.radians(yaw_degrees)
             main.save_scene(room_id, scene)

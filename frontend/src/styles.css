@@ -253,17 +253,22 @@ a {
 
 .tabs {
   display: flex;
-  gap: 6px;
+  gap: 3px;
+  min-width: 0;
 }
 
 .tabs button {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   background: none;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 8px 6px;
+  padding: 8px 0;
   font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--muted);
   cursor: pointer;
 }
@@ -906,4 +911,113 @@ a {
   background: rgba(247, 244, 239, 0.7);
   color: var(--accent);
   font-weight: 500;
+}
+
+.chat-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.chat-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.chat-link:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.chat-list {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.chat-empty {
+  display: grid;
+  gap: 8px;
+}
+
+.chat-empty p {
+  margin: 0;
+}
+
+.chat-example {
+  text-align: left;
+  white-space: normal;
+}
+
+.chat-msg {
+  display: grid;
+  gap: 4px;
+}
+
+.chat-msg.user {
+  justify-items: end;
+}
+
+.chat-bubble {
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.chat-msg.user .chat-bubble {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border-color: transparent;
+}
+
+.chat-changes {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.chat-thinking {
+  font-size: 14px;
+}
+
+.chat-prefs {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chat-pref {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 4px 2px 10px;
+}
+
+.chat-pref button {
+  background: none;
+  border: none;
+  padding: 0 4px;
+  font: inherit;
+  color: var(--muted);
+  cursor: pointer;
 }
