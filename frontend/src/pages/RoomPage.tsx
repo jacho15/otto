@@ -438,11 +438,6 @@ export default function RoomPage() {
             setServerVersion((v) => v + 1)
           }} />
           <DoorSize room={room} onSaved={setRoom} />
-          {room.has_story && (
-            <Link className="text-link story-link" to={`/rooms/${encodeURIComponent(id)}/how-it-was-made`}>
-              How this room was made from a phone video
-            </Link>
-          )}
         </div>
         <div className="tabs">
           <button className={tab === 'room' ? 'on' : ''} onClick={() => setTab('room')}>Room</button>

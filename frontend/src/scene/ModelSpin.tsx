@@ -8,11 +8,12 @@ export default function ModelSpin({ url, label }: { url: string; label: string }
   return (
     <div className="model-spin" role="img" aria-label={`3D model of the ${label}`}>
       <Canvas camera={{ position: [1.6, 1.1, 1.6], fov: 35 }} dpr={[1, 2]}>
-        <color attach="background" args={['#F7F4EF']} />
+        <color attach="background" args={['#FFFFFF']} />
         <hemisphereLight args={['#ffffff', '#d9cfbf', 1.4]} />
         <directionalLight position={[2, 3, 2]} intensity={1.6} />
         <Suspense fallback={null}>
-          <Bounds fit clip observe margin={1.15}>
+          {/* keyed by model so the camera re-frames each new piece in the same canvas */}
+          <Bounds key={url} fit clip observe margin={1.3}>
             <Model url={url} />
           </Bounds>
         </Suspense>

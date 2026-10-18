@@ -61,7 +61,6 @@ export interface Room {
   total: Total
   totals: Money[]
   can_undo: boolean
-  has_story: boolean // has a "How this room was made" page
   door: Door
 }
 
@@ -97,7 +96,6 @@ export interface RoomSummary {
   size_xy: Vec2
   object_count: number
   kind: 'blueprint' | 'scan'
-  has_story: boolean
 }
 
 export interface MandateInput {
@@ -287,20 +285,4 @@ export interface DataItem {
 export interface DataSummary {
   items: DataItem[]
   note: string
-}
-
-/** How a scanned room was made: the numbers and pictures behind its "How this room was made" page. */
-export interface ScanStory {
-  video: { seconds: number; frames: number; fps: number }
-  stage_frames: { frame: number; time: number; objects: number; labels: string[] }[]
-  candidates: number
-  fitted: number
-  kept: number
-  pieces: { name: string; label: string; frame: number; size: Vec3; fit: string; rmse_cm: number; color: string }[]
-  tracked_frames: number
-  points: number
-  pipeline: {
-    minutes: { depth: number; tracking: number; models: number }
-    sizes_mb: { phone_video: number; uploaded: number; results: number; room: number }
-  }
 }

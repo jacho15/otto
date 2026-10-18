@@ -47,13 +47,10 @@ export default function Home() {
             ))}
           </ul>
         )}
-        {(rooms ?? []).filter((r) => r.has_story).map((r) => (
-          <p key={r.id} className="home-links">
-            <Link className="text-link" to={`/rooms/${encodeURIComponent(r.id)}/how-it-was-made`}>
-              See how {r.name} was made from a phone video
-            </Link>
-          </p>
-        ))}
+        <Link className="card demo-card" to="/demo">
+          <span className="demo-card-title">Turn a phone video into a 3D room</span>
+          <span className="muted">Drop in a short walk-through and watch each piece of furniture get measured and rebuilt.</span>
+        </Link>
         <NewPlace />
         <p className="home-links">
           <YourData />
