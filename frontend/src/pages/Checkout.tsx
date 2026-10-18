@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import { agentCheckout, approveOrder, cancelOrder, deleteMandate, formatPrice, getMandate, putMandate } from '../api'
-import { CURRENCIES, currentViolations, defaultExpiry, errorText, hasListedPrice, mandateSummary, needsGoogleNote, parseLimit, parseShops, tokenLabel, violationsOf } from '../checkoutLogic'
+import { CURRENCIES, currentViolations, defaultExpiry, errorText, hasListedPrice, mandateSummary, needsGoogleNote, parseLimit, parseShops, roomShops, tokenLabel, violationsOf } from '../checkoutLogic'
 import { totalLines } from '../moneyLogic'
 import type { Mandate, Order, RoomObject } from '../types'
 import MoneyLines from './MoneyLines'
@@ -36,7 +36,7 @@ export default function Checkout({ roomId, orders, setOrders, objects }: Props) 
         !error && <p className="muted">Loading…</p>
       ) : (
         <>
-          <MandateCard mandate={mandate} onChange={setMandate} />
+          <MandateCard mandate={mandate} objects={objects} onChange={setMandate} />
           <AskCard
             roomId={roomId}
             mandate={mandate}
@@ -64,20 +64,27 @@ export default function Checkout({ roomId, orders, setOrders, objects }: Props) 
   )
 }
 
-function MandateCard({ mandate, onChange }: { mandate: Mandate | null; onChange: (m: Mandate | null) => void }) {
+function MandateCard({ mandate, objects, onChange }: { mandate: Mandate | null; objects: RoomObject[]; onChange: (m: Mandate | null) => void }) {
+  const suggestedShops = roomShops(objects)
   const [editing, setEditing] = useState(false)
   const [maxItem, setMaxItem] = useState('')
   const [maxTotal, setMaxTotal] = useState('')
   const [currency, setCurrency] = useState('USD')
-  const [shops, setShops] = useState('ikea.com')
+  const [shops, setShops] = useState(suggestedShops)
+  const shopsTouched = useRef(false) // the user typed in the field, or it shows a saved mandate
   const [expires, setExpires] = useState(defaultExpiry())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const showForm = editing || mandate === null
 
+  useEffect(() => {
+    if (!shopsTouched.current) setShops(suggestedShops)
+  }, [suggestedShops])
+
   const startEdit = () => {
     if (mandate) {
+      shopsTouched.current = true
       setMaxItem(mandate.max_item_price == null ? '' : String(mandate.max_item_price))
       setMaxTotal(mandate.max_total == null ? '' : String(mandate.max_total))
       setCurrency(mandate.currency ?? 'USD')
@@ -118,7 +125,8 @@ function MandateCard({ mandate, onChange }: { mandate: Mandate | null; onChange:
       setMaxItem('')
       setMaxTotal('')
       setCurrency('USD')
-      setShops('ikea.com')
+      shopsTouched.current = false
+      setShops(suggestedShops)
       setExpires(defaultExpiry())
     } catch (err) {
       setError(errorText(err))
@@ -151,7 +159,10 @@ function MandateCard({ mandate, onChange }: { mandate: Mandate | null; onChange:
           </label>
           <label>
             Allowed shops (comma separated)
-            <input type="text" value={shops} onChange={(e) => setShops(e.target.value)} />
+            <input type="text" value={shops} onChange={(e) => {
+              shopsTouched.current = true
+              setShops(e.target.value)
+            }} />
           </label>
           <label>
             Expires

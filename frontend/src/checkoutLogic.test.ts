@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from './api'
-import { currentViolations, defaultExpiry, errorText, hasListedPrice, isGoogleUrl, mandateSummary, needsGoogleNote, orderedNames, parseLimit, parseShops, violationsOf } from './checkoutLogic'
+import { currentViolations, defaultExpiry, errorText, hasListedPrice, isGoogleUrl, mandateSummary, needsGoogleNote, orderedNames, parseLimit, parseShops, roomShops, violationsOf } from './checkoutLogic'
 import type { Mandate, Order, OrderItem, RoomObject } from './types'
 
 describe('parseShops', () => {
@@ -184,6 +184,29 @@ describe('isGoogleUrl', () => {
     expect(isGoogleUrl('https://notgoogle.com/x')).toBe(false)
     expect(isGoogleUrl('https://google.com.evil.test/x')).toBe(false)
     expect(isGoogleUrl('not a link')).toBe(false)
+  })
+})
+
+describe('roomShops', () => {
+  const piece = (url?: string, hidden?: boolean): RoomObject =>
+    ({
+      name: 'p', label: 'sofa', pos: [0, 0, 0], yaw: 0, size: [1, 1, 1], mesh: null, hidden,
+      product: url ? { title: 'A', url, price: 10, currency: 'USD' } : undefined,
+    }) as RoomObject
+  it('lists unique hosts with ikea.com first, then room order', () => {
+    const objects = [piece('https://www.wayfair.com/a'), piece('https://www.ikea.com/b'), piece('https://example.com/c'), piece('https://wayfair.com/d')]
+    expect(roomShops(objects)).toBe('ikea.com, wayfair.com, example.com')
+  })
+  it('keeps room order when there is no ikea.com piece', () => {
+    expect(roomShops([piece('https://b.test/a'), piece('https://a.test/a')])).toBe('b.test, a.test')
+  })
+  it('skips hidden pieces, missing links, Google links and bad links', () => {
+    const objects = [piece('https://x.test/a', true), piece(), piece('https://www.google.com/shopping/product/1'), piece('not a link'), piece('https://y.test/a')]
+    expect(roomShops(objects)).toBe('y.test')
+  })
+  it('falls back to ikea.com', () => {
+    expect(roomShops([])).toBe('ikea.com')
+    expect(roomShops([piece('https://www.google.com/x')])).toBe('ikea.com')
   })
 })
 

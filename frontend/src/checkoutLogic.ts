@@ -112,6 +112,18 @@ export function isGoogleUrl(url: string): boolean {
   return host === 'google.com' || !!host?.endsWith('.google.com')
 }
 
+/** Shops of the visible room pieces for the mandate's shop field: ikea.com first, then room order. "ikea.com" when none. */
+export function roomShops(objects: RoomObject[]): string {
+  const hosts = objects.flatMap((o) => {
+    const url = o.product?.url
+    const host = o.hidden || !url || isGoogleUrl(url) ? null : shopHost(url)
+    return host ? [host] : []
+  })
+  const unique = [...new Set(hosts)]
+  const shops = unique.includes('ikea.com') ? ['ikea.com', ...unique.filter((h) => h !== 'ikea.com')] : unique
+  return shops.length > 0 ? shops.join(', ') : 'ikea.com'
+}
+
 /** True when a listed price comes with a Google Shopping link, which a shop limit in the mandate may refuse. */
 export const needsGoogleNote = (objects: RoomObject[], objectName: string, url: string): boolean =>
   hasListedPrice(objects, objectName) && isGoogleUrl(url)
