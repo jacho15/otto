@@ -289,6 +289,7 @@ export default function RoomScene(props: Props) {
           minDistance={1}
           maxDistance={span * 4}
         />
+      <ReadyFlag />
       </Canvas>
       <div className="scene-toolbar">
         <button className={view === 'persp' ? 'on' : ''} onClick={() => setView('persp')}>3D view</button>
@@ -359,6 +360,24 @@ function CaptureBridge({
       capture.current = null
     }
   }, [gl, scene, camera, capture, composer, filename])
+  return null
+}
+
+/** Marks the page once every model has loaded and a few frames have drawn, so a screenshot can wait for it. */
+function ReadyFlag() {
+  const { active, loaded, total } = useProgress()
+  const frames = useRef(0)
+  useFrame(() => {
+    if (active || loaded < total) {
+      frames.current = 0
+      return
+    }
+    frames.current += 1
+    if (frames.current === 30) document.documentElement.dataset.sceneReady = '1'
+  })
+  useEffect(() => () => {
+    delete document.documentElement.dataset.sceneReady
+  }, [])
   return null
 }
 

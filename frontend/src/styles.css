@@ -128,6 +128,17 @@ a {
   grid-template-columns: 1fr 340px;
 }
 
+/* ?capture=1: just the room, for a picture made on the server */
+.room-page.capture {
+  grid-template-columns: 1fr;
+}
+
+.room-page.capture .panel,
+.room-page.capture .scene-toolbar,
+.room-page.capture .loading {
+  display: none;
+}
+
 .viewport {
   position: relative;
   min-height: 0;
