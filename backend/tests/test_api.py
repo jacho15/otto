@@ -14,7 +14,7 @@ def test_list_rooms(client):
     r = client.get("/api/rooms")
     assert r.status_code == 200
     assert r.json() == [
-        {"id": ROOM, "name": "Test Room", "kind": "scan", "size_xy": [5.0, 4.0], "object_count": 3, "has_story": False}
+        {"id": ROOM, "name": "Test Room", "kind": "scan", "size_xy": [5.0, 4.0], "object_count": 3}
     ]
 
 
@@ -168,12 +168,3 @@ def test_set_room_size_rejects_bad_sizes(client, data_dir):
 def test_set_room_size_unknown_room(client):
     assert client.patch("/api/rooms/nope", json={"width": 5, "depth": 4, "height": 2.6}).status_code == 404
 
-
-def test_has_story_only_when_the_room_ships_one(client, data_dir):
-    assert client.get(ROOM_URL).json()["has_story"] is False
-    assert next(r for r in client.get("/api/rooms").json() if r["id"] == ROOM)["has_story"] is False
-    demo = data_dir / "rooms" / ROOM / "demo"
-    demo.mkdir()
-    (demo / "story.json").write_text("{}")
-    assert client.get(ROOM_URL).json()["has_story"] is True
-    assert next(r for r in client.get("/api/rooms").json() if r["id"] == ROOM)["has_story"] is True
