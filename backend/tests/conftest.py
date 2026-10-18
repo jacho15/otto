@@ -23,10 +23,16 @@ def make_item(item_id, size, price):
     }
 
 
+def make_flat_item(item_id, size, price):
+    """A catalog item with no model file and no photo."""
+    return {**make_item(item_id, size, price), "label": "lamp", "model": None, "photo": None}
+
+
 CATALOG = [
     make_item("small-chair", [0.5, 0.5, 0.8], 60.0),
     make_item("big-table", [2.0, 1.4, 0.7], 300.0),
     make_item("wide-bench", [4.0, 0.6, 0.5], 90.0),
+    make_flat_item("flat-lamp", [0.3, 0.3, 1.5], 25.0),
 ]
 
 
@@ -67,7 +73,8 @@ def data_dir(tmp_path, monkeypatch):
     (catalog / "models").mkdir(parents=True)
     (catalog / "catalog.json").write_text(json.dumps(CATALOG), "utf-8")
     for item in CATALOG:
-        (catalog / item["model"]).write_bytes(b"glTF" + bytes(8))
+        if item["model"]:
+            (catalog / item["model"]).write_bytes(b"glTF" + bytes(8))
     monkeypatch.setenv("OTTO_DATA", str(tmp_path / "data"))
     return tmp_path / "data"
 

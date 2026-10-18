@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { catalogFileUrl, formatPrice, getCatalog, listSaved, saveItem, unsaveItem } from '../api'
+import { formatPrice, getCatalog, listSaved, saveItem, unsaveItem } from '../api'
 import { errorText } from '../checkoutLogic'
 import type { CatalogItem, SavedItem } from '../types'
+import ShopPhoto from './ShopPhoto'
 
 const cm = (m: number) => Math.round(m * 100)
 
@@ -51,7 +52,7 @@ export default function Liked() {
           <ul className="liked-grid">
             {saved.map(({ catalog_id, note, item }) => (
               <li key={catalog_id} className="card shop-card">
-                <img className="shop-photo" src={catalogFileUrl(item.photo)} alt={item.title} loading="lazy" />
+                <ShopPhoto item={item} />
                 <div className="shop-info">
                   <div className="shop-head">
                     <strong>{item.title}</strong>
@@ -81,7 +82,7 @@ export default function Liked() {
               const liked = likedIds.has(item.id)
               return (
                 <li key={item.id} className="card shop-card">
-                  <img className="shop-photo" src={catalogFileUrl(item.photo)} alt={item.title} loading="lazy" />
+                  <ShopPhoto item={item} />
                   <div className="shop-info">
                     <div className="shop-head">
                       <strong>{item.title}</strong>

@@ -147,7 +147,30 @@ def test_place_item(design, client, data_dir):
     assert placed["pos"] == [1.0, -1.0, 0.0] and abs(placed["yaw"] - 1.5708) < 1e-3
     assert body["room"]["warnings"] == []
     assert objects(client)["small_chair"] == placed
-    assert (data_dir / "rooms" / ROOM / "meshes" / "small-chair.glb").is_file()
+    assert placed["mesh"] == "catalog/models/small-chair.glb"
+    assert not (data_dir / "rooms" / ROOM / "meshes" / "small-chair.glb").exists()
+
+
+def test_place_item_without_model(design, client):
+    api = FakeApi([
+        [call("get_catalog")],
+        [call("find_spots", catalog_id="flat-lamp", near=None, against_wall=False)],
+        [call("place_item", catalog_id="flat-lamp", x=1.0, y=-1.0, yaw_degrees=0)],
+        [text("Placed the lamp.")],
+    ])
+    r = design(api)
+    assert r.status_code == 200
+    assert {c["id"] for c in json.loads(api.result_text(1))} >= {"flat-lamp"}
+    assert json.loads(api.result_text(2))
+    lamp = {o["name"]: o for o in r.json()["room"]["objects"]}["flat_lamp"]
+    assert lamp["mesh"] is None and lamp["shape"] == "lamp"
+    assert r.json()["changes"] == [{"action": "placed", "name": "flat_lamp", "title": "flat-lamp title"}]
+
+
+def test_long_reply_is_cut_to_four_sentences(design):
+    reply = "One. Two! Three? Four. Five. Six."
+    assert design(FakeApi([[text(reply)]])).json()["message"] == "One. Two! Three? Four."
+    assert design(FakeApi([[text("Short reply.")]])).json()["message"] == "Short reply."
 
 
 def test_rejected_placements_leave_room_unchanged(design, client):

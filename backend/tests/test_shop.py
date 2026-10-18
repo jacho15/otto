@@ -1,6 +1,7 @@
 import json
 
 from conftest import CATALOG, ROOM
+from otto_api.main import catalog_dir, load_catalog
 from otto_api.fit import footprint_corners, outside_walls
 from otto_api.place import add_item
 
@@ -45,7 +46,8 @@ def test_add_lands_inside_walls_without_overlap(client, data_dir):
     obj = find(body["objects"], "big_table")
     assert obj["source"] == "catalog"
     assert obj["catalog_id"] == "big-table"
-    assert obj["mesh"] == "meshes/big-table.glb"
+    assert obj["mesh"] == "catalog/models/big-table.glb"
+    assert "shape" not in obj
     assert obj["movable"] is True
     assert obj["size"] == [2.0, 1.4, 0.7]
     assert obj["rgba"] == [0.5, 0.5, 0.5, 1.0]
@@ -74,15 +76,34 @@ def test_add_name_suffix(client):
     assert names[-1]["warnings"] == []
 
 
-def test_mesh_copied_once(client, data_dir):
-    mesh = data_dir / "rooms" / ROOM / "meshes" / "small-chair.glb"
-    assert not mesh.exists()
-    client.post(URL, json={"catalog_id": "small-chair"})
-    assert mesh.read_bytes()[:4] == b"glTF"
-    mesh.write_bytes(b"changed")
-    client.post(URL, json={"catalog_id": "small-chair"})
-    assert mesh.read_bytes() == b"changed"
-    assert list(mesh.parent.glob("*.tmp")) == []
+def test_add_copies_nothing(client, data_dir):
+    meshes = data_dir / "rooms" / ROOM / "meshes"
+    before = sorted(meshes.iterdir())
+    obj = find(client.post(URL, json={"catalog_id": "small-chair"}).json()["objects"], "small_chair")
+    assert obj["mesh"] == "catalog/models/small-chair.glb"
+    assert sorted(meshes.iterdir()) == before
+
+
+def test_add_item_without_model(client, data_dir):
+    body = client.post(URL, json={"catalog_id": "flat-lamp"}).json()
+    obj = find(body["objects"], "flat_lamp")
+    assert obj["mesh"] is None
+    assert obj["shape"] == "lamp"
+    assert obj["size"] == [0.3, 0.3, 1.5]
+    assert find(saved(data_dir)["objects"], "flat_lamp") == obj
+    assert body["warnings"] == []
+
+
+def test_real_catalog_has_21_items(monkeypatch):
+    monkeypatch.delenv("OTTO_DATA", raising=False)
+    catalog = load_catalog()
+    assert len(catalog) == 21
+    assert len({i["id"] for i in catalog}) == 21
+    for item in catalog:
+        assert (item["model"] is None) == (item["photo"] is None)
+        assert all(s > 0 for s in item["size"]) and len(item["size"]) == 3
+        if item["model"]:
+            assert (catalog_dir() / item["model"]).is_file()
 
 
 def test_replace_copies_pos_and_hides_target(client, data_dir):
@@ -147,6 +168,20 @@ def test_delete_replacement_when_target_gone(client):
     added = client.post(URL, json={"catalog_id": "small-chair", "replace": "chair"}).json()["added"]
     assert client.delete(f"{URL}/chair").status_code == 200
     assert client.delete(f"{URL}/{added}").status_code == 200
+
+
+def test_delete_not_movable_is_409(client, data_dir):
+    assert client.delete(f"{URL}/shelf").status_code == 409
+    assert find(saved(data_dir)["objects"], "shelf")
+    assert client.delete(f"{URL}/chair").status_code == 200
+
+
+def test_delete_drops_dangling_replaces(client, data_dir):
+    added = client.post(URL, json={"catalog_id": "small-chair", "replace": "chair"}).json()["added"]
+    assert find(saved(data_dir)["objects"], added)["replaces"] == "chair"
+    body = client.delete(f"{URL}/chair").json()
+    assert "replaces" not in find(body["objects"], added)
+    assert "replaces" not in find(saved(data_dir)["objects"], added)
 
 
 def test_add_errors(client, data_dir):

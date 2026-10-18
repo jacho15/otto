@@ -2,7 +2,6 @@ import json
 import os
 import re
 import secrets
-import shutil
 import tempfile
 import threading
 from datetime import date, datetime, timezone
@@ -194,19 +193,6 @@ def save_order(room_id: str, order: dict) -> None:
     write_json(room_dir(room_id) / "orders" / f"{order['id']}.json", order)
 
 
-def copy_mesh(room_id: str, item: dict) -> None:
-    """Copy the catalog model file into the room's meshes. Raises FileNotFoundError."""
-    source = catalog_dir() / item["model"]
-    if not source.is_file():
-        raise FileNotFoundError(item["model"])
-    mesh = room_dir(room_id) / "meshes" / f"{item['id']}.glb"
-    if not mesh.exists():
-        mesh.parent.mkdir(exist_ok=True)
-        tmp = mesh.with_suffix(".tmp")
-        shutil.copyfile(source, tmp)
-        os.replace(tmp, mesh)
-
-
 @app.get("/api/rooms")
 def list_rooms():
     result = []
@@ -275,10 +261,6 @@ def add_object(room_id: str, body: ObjectAdd):
                 raise HTTPException(409, "Object is hidden")
             if not target.get("movable", True):
                 raise HTTPException(409, "Object is not movable")
-        try:
-            copy_mesh(room_id, item)
-        except FileNotFoundError:
-            raise HTTPException(404, "Model file not found")
         scene["objects"], name = add_item(scene["room"], scene["objects"], item, body.replace)
         save_scene(room_id, scene)
         return {**room_response(room_id, scene), "added": name}
@@ -289,11 +271,14 @@ def delete_object(room_id: str, name: str):
     with lock:
         scene = load_scene(room_id)
         obj = find_object(scene, name)
+        if not obj.get("movable", True):
+            raise HTTPException(409, "Object is not movable")
         scene["objects"].remove(obj)
-        if obj.get("replaces"):
-            for other in scene["objects"]:
-                if other["name"] == obj["replaces"]:
-                    other.pop("hidden", None)
+        for other in scene["objects"]:
+            if obj.get("replaces") and other["name"] == obj["replaces"]:
+                other.pop("hidden", None)
+            if other.get("replaces") == name:
+                del other["replaces"]
         save_scene(room_id, scene)
         return room_response(room_id, scene)
 

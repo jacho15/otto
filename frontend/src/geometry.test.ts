@@ -4,6 +4,7 @@ import {
   findWarnings,
   formatDistance,
   footprintCorners,
+  footprintGap,
   footprintsOverlap,
   outsideWalls,
   roomToThree,
@@ -137,6 +138,46 @@ describe('wallGaps', () => {
 
   it('goes negative past a wall', () => {
     expect(wallGaps(footprintCorners([2.4, 0], [1, 1], 0), [5, 4])['+x']).toBeCloseTo(-0.4, 9)
+  })
+})
+
+describe('footprintGap', () => {
+  const box = (x: number, y: number, w = 1, d = 1, yaw = 0) => footprintCorners([x, y], [w, d], yaw)
+
+  it('measures a straight gap between facing sides', () => {
+    const g = footprintGap(box(0, 0), box(2, 0.2))
+    expect(g.gap).toBeCloseTo(1, 9)
+    expect(g.from[0]).toBeCloseTo(0.5, 9)
+    expect(g.to).toEqual([1.5, g.from[1]])
+  })
+
+  it('is the same from either side, with the points swapped', () => {
+    const ab = footprintGap(box(0, 0), box(2, 0.2))
+    const ba = footprintGap(box(2, 0.2), box(0, 0))
+    expect(ba.gap).toBeCloseTo(ab.gap, 9)
+    // facing sides tie along y, so only x is pinned down
+    expect(ba.from[0]).toBeCloseTo(ab.to[0], 9)
+    expect(ba.to[0]).toBeCloseTo(ab.from[0], 9)
+  })
+
+  it('measures corner to corner', () => {
+    const g = footprintGap(box(0, 0), box(2, 2))
+    expect(g.gap).toBeCloseTo(Math.SQRT2, 9)
+    close(g.from, [0.5, 0.5])
+    close(g.to, [1.5, 1.5])
+  })
+
+  it('measures a rotated rectangle', () => {
+    // a diamond with half-diagonal sqrt(2)/2 centred 2 away: its tip is at x = 2 - sqrt(2)/2
+    const g = footprintGap(box(0, 0), box(2, 0, 1, 1, Math.PI / 4))
+    expect(g.gap).toBeCloseTo(1.5 - Math.SQRT2 / 2, 9)
+    close(g.from, [0.5, 0])
+    close(g.to, [2 - Math.SQRT2 / 2, 0])
+  })
+
+  it('is zero when touching or overlapping', () => {
+    expect(footprintGap(box(0, 0), box(0.5, 0)).gap).toBe(0)
+    expect(footprintGap(box(0, 0), box(1, 0)).gap).toBeCloseTo(0, 9)
   })
 })
 

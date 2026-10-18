@@ -134,11 +134,15 @@ export function itemCount(n: number) {
   return `${n} ${n === 1 ? 'item' : 'items'}`
 }
 
-export function ErrorCard({ message }: { message: string }) {
+export function ErrorCard({ message, backLink = false }: { message: string; backLink?: boolean }) {
   return (
     <div className="card error-card">
       <strong>Something went wrong</strong>
-      <p>{message} Check that the backend is running on port 8000, then reload.</p>
+      <p>
+        {message}
+        {message === 'Cannot reach the Otto server.' && ' Check that the backend is running on port 8000, then reload.'}
+      </p>
+      {backLink && <Link className="text-link" to="/">Back to rooms</Link>}
     </div>
   )
 }

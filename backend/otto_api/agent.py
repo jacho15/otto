@@ -4,6 +4,7 @@ It cannot set the mandate, approve, cancel an order or move furniture.
 The user approves in the UI. Nothing here makes a payment.
 """
 import json
+import re
 import secrets
 from datetime import date, datetime, timezone
 from urllib.parse import urlsplit
@@ -229,3 +230,9 @@ def final_text(message):
         return "The agent ran out of steps before it finished. Try a simpler request."
     text = " ".join(b.text.strip() for b in message.content if b.type == "text" and b.text.strip())
     return text or "Done."
+
+
+def first_sentences(text, limit):
+    """The first `limit` sentences of text. A sentence ends at . ! or ? followed by a space."""
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    return " ".join(sentences[:limit])

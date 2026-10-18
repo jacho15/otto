@@ -114,7 +114,11 @@ export const agentDesign = (id: string, instruction: string) =>
 
 export const catalogFileUrl = (path: string) => `/api/catalog/files/${path.split('/').map(encodeURIComponent).join('/')}`
 
-export const meshUrl = (id: string, mesh: string) => `/files/${encodeURIComponent(id)}/${mesh.split('/').map(encodeURIComponent).join('/')}`
+/** A catalog piece's model lives with the catalog; any other mesh lives in the room folder. */
+export const meshUrl = (id: string, mesh: string) =>
+  mesh.startsWith('catalog/')
+    ? catalogFileUrl(mesh.slice('catalog/'.length))
+    : `/files/${encodeURIComponent(id)}/${mesh.split('/').map(encodeURIComponent).join('/')}`
 
 export function formatPrice(amount: number, currency = 'USD') {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)

@@ -300,6 +300,15 @@ a {
   border-bottom: 1px solid var(--line);
 }
 
+.shop-photo.placeholder {
+  display: grid;
+  place-items: center;
+  background: var(--line);
+  color: var(--muted);
+  font-size: 48px;
+  font-weight: 700;
+}
+
 .shop-info {
   padding: 12px 14px 14px;
   display: grid;

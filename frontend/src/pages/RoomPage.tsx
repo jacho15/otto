@@ -175,7 +175,7 @@ export default function RoomPage() {
           <Link to="/" className="wordmark">otto</Link>
         </header>
         <main className="home-main">
-          <ErrorCard message={error} />
+          <ErrorCard message={error} backLink />
         </main>
       </div>
     )

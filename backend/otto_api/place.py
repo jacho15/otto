@@ -56,6 +56,31 @@ def unique_name(catalog_id, objects):
     return name
 
 
+def catalog_object(item, name, pos, yaw):
+    """A room object for a catalog item. An item with no model gets a stand-in box of its label."""
+    obj = {
+        "name": name,
+        "label": item["label"],
+        "source": "catalog",
+        "catalog_id": item["id"],
+        "mesh": f"catalog/{item['model']}" if item["model"] else None,
+        "pos": [pos[0], pos[1], 0.0],
+        "yaw": yaw,
+        "size": item["size"],
+        "movable": True,
+        "rgba": item["rgba"],
+        "product": {
+            "title": item["title"],
+            "url": item["url"],
+            "price": item["price"],
+            "currency": item["currency"],
+        },
+    }
+    if not item["model"]:
+        obj["shape"] = item.get("shape", item["label"])
+    return obj
+
+
 def add_item(room, objects, item, replace=None):
     """Return (new object list, new object name). Inputs are not changed.
 
@@ -69,24 +94,7 @@ def add_item(room, objects, item, replace=None):
     else:
         x, y, yaw = free_spot(room, objects, size)
     name = unique_name(item["id"], objects)
-    new = {
-        "name": name,
-        "label": item["label"],
-        "source": "catalog",
-        "catalog_id": item["id"],
-        "mesh": f"meshes/{item['id']}.glb",
-        "pos": [x, y, 0.0],
-        "yaw": yaw,
-        "size": size,
-        "movable": True,
-        "rgba": item["rgba"],
-        "product": {
-            "title": item["title"],
-            "url": item["url"],
-            "price": item["price"],
-            "currency": item["currency"],
-        },
-    }
+    new = catalog_object(item, name, (x, y), yaw)
     if target:
         new["replaces"] = target["name"]
     objects = [{**o, "hidden": True} if o is target else o for o in objects]

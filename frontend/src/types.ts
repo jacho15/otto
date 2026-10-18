@@ -11,7 +11,8 @@ export interface Product {
 export interface RoomObject {
   name: string
   label: string
-  mesh: string
+  mesh: string | null // null: no model yet, drawn as a stand-in of `shape`
+  shape?: string
   pos: Vec3
   yaw: number
   size: Vec3
@@ -56,8 +57,8 @@ export interface CatalogItem {
   currency: string
   size: Vec3 // metres
   rgba: [number, number, number, number]
-  model: string
-  photo: string
+  model: string | null
+  photo: string | null
 }
 
 export interface RoomSummary {

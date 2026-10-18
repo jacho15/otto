@@ -6,6 +6,7 @@ import pytest
 
 from conftest import ROOM
 from otto_api import main
+from otto_api.agent import first_sentences
 from test_orders import write_order
 
 MANDATE = {"max_item_price": None, "max_total": None, "shops": [], "expires": None}
@@ -332,3 +333,11 @@ def test_instruction_length(client, instruction):
 
 def test_unknown_room(client):
     assert client.post("/api/rooms/nope/agent/checkout", json={"instruction": "x"}).status_code == 404
+
+
+def test_first_sentences():
+    assert first_sentences("A b. C d! E f? G h. I j.", 4) == "A b. C d! E f? G h."
+    assert first_sentences("  Only one.  ", 4) == "Only one."
+    assert first_sentences("About 2.5 m wide. Next.", 1) == "About 2.5 m wide."
+    assert first_sentences("No end", 2) == "No end"
+    assert first_sentences("", 4) == ""

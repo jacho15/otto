@@ -26,8 +26,9 @@ import {
 } from 'three'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
 import { meshUrl } from '../api'
-import { footprintCorners, formatDistance, roomToThree, threeToRoom, wallGaps } from '../geometry'
+import { footprintCorners, footprintGap, formatDistance, roomToThree, threeToRoom, wallGaps } from '../geometry'
 import type { Room, RoomObject, Vec2, Vec3 } from '../types'
+import StandIn from './StandIn'
 
 const ACCENT = '#2F5D50'
 const WARN = '#C2412D'
@@ -149,6 +150,9 @@ export default function RoomScene(props: Props) {
             <Footprint key={o.name} obj={o} color={warned.has(o.name) ? WARN : ACCENT} />
           ))}
         {selectedObj && <WallMeasure obj={selectedObj} sizeXY={room.room.size_xy} />}
+        {selectedObj && (
+          <NearestGap obj={selectedObj} others={objects.filter((o) => !o.hidden && o.name !== selectedObj.name)} />
+        )}
 
         {pointCloud && showPoints && (
           <Suspense fallback={null}>
@@ -247,7 +251,29 @@ function Piece({
   obj: RoomObject
   onPointerDown: (e: ThreeEvent<PointerEvent>) => void
 }) {
-  const { scene } = useGLTF(meshUrl(roomId, obj.mesh))
+  return (
+    <group
+      position={roomToThree([obj.pos[0], obj.pos[1], 0])}
+      rotation-y={obj.yaw}
+      onPointerDown={onPointerDown}
+      onClick={(e) => e.stopPropagation()}
+      onPointerOver={(e) => {
+        e.stopPropagation()
+        document.body.style.cursor = obj.movable ? 'grab' : 'pointer'
+      }}
+      onPointerOut={() => {
+        document.body.style.cursor = ''
+      }}
+    >
+      <group rotation-x={-Math.PI / 2}>
+        {obj.mesh ? <GlbModel url={meshUrl(roomId, obj.mesh)} obj={obj} /> : <StandIn obj={obj} />}
+      </group>
+    </group>
+  )
+}
+
+function GlbModel({ url, obj }: { url: string; obj: RoomObject }) {
+  const { scene } = useGLTF(url)
   const [r, g, b, a] = obj.rgba
   const ghost = !!obj.hidden
 
@@ -292,25 +318,7 @@ function Piece({
     return root
   }, [scene, r, g, b, a, ghost])
 
-  return (
-    <group
-      position={roomToThree([obj.pos[0], obj.pos[1], 0])}
-      rotation-y={obj.yaw}
-      onPointerDown={onPointerDown}
-      onClick={(e) => e.stopPropagation()}
-      onPointerOver={(e) => {
-        e.stopPropagation()
-        document.body.style.cursor = obj.movable ? 'grab' : 'pointer'
-      }}
-      onPointerOut={() => {
-        document.body.style.cursor = ''
-      }}
-    >
-      <group rotation-x={-Math.PI / 2}>
-        <primitive object={model} />
-      </group>
-    </group>
-  )
+  return <primitive object={model} />
 }
 
 function Footprint({ obj, color }: { obj: RoomObject; color: string }) {
@@ -373,22 +381,41 @@ function WallMeasure({ obj, sizeXY }: { obj: RoomObject; sizeXY: Vec2 }) {
       {segs
         .filter(([, , gap]) => gap >= 0.005)
         .map(([a, b, gap], i) => (
-          <group key={i}>
-            <Line
-              points={[roomToThree([a[0], a[1], 0.02]), roomToThree([b[0], b[1], 0.02])]}
-              color={ACCENT}
-              lineWidth={1.5}
-              dashed
-              dashSize={0.05}
-              gapSize={0.03}
-            />
-            <Html position={roomToThree([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0.05])} center className="dist">
-              {formatDistance(gap)}
-            </Html>
-          </group>
+          <DistanceLine key={i} a={a} b={b} gap={gap} />
         ))}
     </>
   )
+}
+
+/** A dashed line on the floor with its length in a label. */
+function DistanceLine({ a, b, gap }: { a: Vec2; b: Vec2; gap: number }) {
+  return (
+    <group>
+      <Line
+        points={[roomToThree([a[0], a[1], 0.02]), roomToThree([b[0], b[1], 0.02])]}
+        color={ACCENT}
+        lineWidth={1.5}
+        dashed
+        dashSize={0.05}
+        gapSize={0.03}
+      />
+      <Html position={roomToThree([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0.05])} center className="dist">
+        {formatDistance(gap)}
+      </Html>
+    </group>
+  )
+}
+
+/** Gap from the selected piece to the nearest other visible piece. Nothing if they touch or overlap. */
+function NearestGap({ obj, others }: { obj: RoomObject; others: RoomObject[] }) {
+  const mine = footprintCorners(obj.pos, obj.size, obj.yaw)
+  let nearest: ReturnType<typeof footprintGap> | null = null
+  for (const o of others) {
+    const g = footprintGap(mine, footprintCorners(o.pos, o.size, o.yaw))
+    if (!nearest || g.gap < nearest.gap) nearest = g
+  }
+  if (!nearest || nearest.gap < 0.005) return null
+  return <DistanceLine a={nearest.from} b={nearest.to} gap={nearest.gap} />
 }
 
 function PointCloud({ url }: { url: string }) {

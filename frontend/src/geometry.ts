@@ -103,6 +103,38 @@ export function wallGaps(corners: Vec2[], sizeXY: Vec2): WallGaps {
   }
 }
 
+export interface Gap {
+  gap: number
+  from: Vec2 // closest point on a
+  to: Vec2 // closest point on b
+}
+
+function closestOnSegment(p: Vec2, a: Vec2, b: Vec2): Vec2 {
+  const dx = b[0] - a[0]
+  const dy = b[1] - a[1]
+  const len2 = dx * dx + dy * dy
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2))
+  return [a[0] + t * dx, a[1] + t * dy]
+}
+
+/** Shortest distance between two footprints and the closest point on each. Zero if they overlap. */
+export function footprintGap(a: Vec2[], b: Vec2[]): Gap {
+  if (footprintsOverlap(a, b, 0)) return { gap: 0, from: a[0], to: a[0] }
+  let best: Gap = { gap: Infinity, from: a[0], to: b[0] }
+  const edges = (c: Vec2[]) => c.map((p, i) => [p, c[(i + 1) % c.length]] as [Vec2, Vec2])
+  // Between disjoint convex polygons the closest pair always includes a corner of one of them.
+  for (const [from, c, swap] of [[a, b, false], [b, a, true]] as const) {
+    for (const p of from) {
+      for (const [e0, e1] of edges(c)) {
+        const q = closestOnSegment(p, e0, e1)
+        const gap = Math.hypot(p[0] - q[0], p[1] - q[1])
+        if (gap < best.gap) best = swap ? { gap, from: q, to: p } : { gap, from: p, to: q }
+      }
+    }
+  }
+  return best
+}
+
 /** Metres as "1.25 m", or "35 cm" under a metre. */
 export function formatDistance(m: number): string {
   return Math.abs(m) >= 1 ? `${m.toFixed(2)} m` : `${Math.round(m * 100)} cm`

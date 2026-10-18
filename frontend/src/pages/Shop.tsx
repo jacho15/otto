@@ -1,7 +1,8 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
-import { catalogFileUrl, formatPrice, getCatalog } from '../api'
+import { formatPrice, getCatalog } from '../api'
 import { FIT_TEXT, SORT_TEXT, productFit, sortItems, type Fit, type SortKey } from '../shopLogic'
 import type { CatalogItem, RoomObject, RoomShape } from '../types'
+import ShopPhoto from './ShopPhoto'
 
 interface Props {
   room: RoomShape
@@ -68,7 +69,7 @@ export default function Shop({ room, objects, target, busy, onAdd }: Props) {
           const fit = fits.get(item.id) ?? 'fits'
           return (
             <li key={item.id} className="card shop-card">
-              <img className="shop-photo" src={catalogFileUrl(item.photo)} alt={item.title} loading="lazy" />
+              <ShopPhoto item={item} />
               <div className="shop-info">
                 <div className="shop-head">
                   <strong>{item.title}</strong>

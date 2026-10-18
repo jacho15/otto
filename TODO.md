@@ -7,19 +7,23 @@ Website work only. The video-to-room pipeline is being built on a separate branc
 - [x] Overlap and wall checks (backend and frontend, same rules)
 - [x] React 3D room editor: select, drag, Q/E rotate, Delete removes, red warnings, price total
 - [x] Demo room with 5 IKEA pieces
+- [x] Edit room size (m/ft); pieces left outside the walls get warnings
+- [x] Scanned Lounge: a room reconstructed from a phone video
 
 ## New place (design a new home)
 - [x] Create an empty blueprint room from typed width, depth and ceiling height (m or ft)
 - [x] "Liked at the showroom" list: save IKEA pieces you like (picked from the catalog for now)
 - [x] Claude design agent: lays out your liked pieces in the blueprint, finds free spots itself, keeps walkways, backs sofas and desks onto walls facing into the room, and may suggest extras within budget
 - [x] Design tab in the room view, with the agent's explanation and the list of changes
-- [ ] Keep the agent's reply to 2–4 sentences (it sometimes runs longer)
+- [x] Keep the agent's reply to 4 short sentences at most (the server cuts longer replies)
 
 ## 1. Shop
 - [x] `catalog.json` with 5 IKEA products (title, URL, price, size W×D×H, photo)
 - [x] Catalog panel in the room view: product cards with photo, price, size and shop link
 - [x] "Add to room": place the product at its real size in the nearest free spot, then select it
 - [x] "Replace": pick a piece in the room and swap in a product. The old piece shows as a faint ghost, and the new one takes its spot (nudged inside the walls if needed). Removing the new piece brings the old one back.
+- [x] Shop fit badges (Fits / Taller than the ceiling / Bigger than the room / No free floor space), with sorting and "Only what fits"
+- [x] 16 more IKEA products (stand-in shapes at real size)
 - [ ] Saved products (wishlist) shared across all rooms
 
 ## 2. Add any furniture
@@ -31,9 +35,10 @@ Website work only. The video-to-room pipeline is being built on a separate branc
 
 ## 3. Fit tools
 - [ ] Snap to walls while dragging (with an on/off toggle)
-- [ ] Live distances from the selected piece to each wall and the nearest furniture
+- [x] Live distances from the selected piece to each wall
+- [x] Live distances from the selected piece to the nearest furniture
 - [ ] Walkway warning when a gap is under 60 cm
-- [ ] Top view: true orthographic floor plan
+- [x] Top view: true orthographic floor plan
 - [ ] Doorway check: "will it get through the door"
 - [ ] Undo, and saved layouts to compare (A/B with price totals)
 
@@ -71,8 +76,8 @@ Like "Frequently bought together", but for your room, and you see it live.
 - [ ] Upload a room video from the home page and show build progress (job polling)
 - [ ] Room dimensions with the upload: the user types the measured width, depth and ceiling height (m or ft/in). Send them to the pipeline so it can lock the metric scale and fit the walls to a known rectangle instead of estimating them, which cuts GPU work. Use them as the walls if the scan's own fit disagrees by a lot, and show both.
 - [ ] Hook up the pipeline branch's output once it is ready
-- [ ] "Test room": an empty room of any size (1.5–15 m wide/deep, 2–4 m high), no upload needed
-- [ ] Optional toggle to show the scan's point cloud
+- [x] "Test room": an empty room of any size (1.5–15 m wide/deep, 2–4 m high), no upload needed (done as New place)
+- [x] Optional toggle to show the scan's point cloud
 
 ## 8. Look and polish
 - [ ] Better lighting: tone mapping, soft shadows, ambient occlusion, wood floor texture, a "Quality" toggle
@@ -83,9 +88,9 @@ Like "Frequently bought together", but for your room, and you see it live.
 - [ ] Chrome extension: "Put in my room" from any product page (reads name, price, photos and size)
 
 ## Known small issues
-- [ ] Backend allows deleting a piece the UI marks as not movable; make both sides agree
+- [x] Backend allows deleting a piece the UI marks as not movable; make both sides agree (now 409)
 - [ ] Totals add mixed currencies under one currency
 - [ ] Backend lock only covers one server process
-- [ ] Error card always says to check port 8000, even for "room not found"
-- [ ] "Add to room" copies the model into the room's `meshes/` and edits `scene.json`, so testing on the demo room leaves changes in git. Point catalog pieces at the catalog's model file instead.
-- [ ] Deleting a piece while its Replace is in flight leaves the new piece with a `replaces` link to nothing
+- [x] Error card always says to check port 8000, even for "room not found"
+- [x] "Add to room" copies the model into the room's `meshes/` and edits `scene.json`, so testing on the demo room leaves changes in git. Point catalog pieces at the catalog's model file instead.
+- [x] Deleting a piece while its Replace is in flight leaves the new piece with a `replaces` link to nothing (the dangling link is now dropped)
