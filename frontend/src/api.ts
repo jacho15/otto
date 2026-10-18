@@ -94,6 +94,10 @@ export const cancelOrder = (id: string, oid: string) =>
 
 export const createRoom = (input: NewRoomInput) => request<Room>('/api/rooms', { method: 'POST', ...json(input) })
 
+/** Set a room's measured size in metres; furniture stays where it is. */
+export const setRoomSize = (id: string, size: { width: number; depth: number; height: number }) =>
+  request<Room>(`/api/rooms/${encodeURIComponent(id)}`, { method: 'PATCH', ...json(size) })
+
 export const listSaved = () => request<SavedItem[]>('/api/saved')
 
 export const saveItem = (catalogId: string, note?: string) =>

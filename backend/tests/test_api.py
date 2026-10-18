@@ -127,3 +127,43 @@ def test_files_path_traversal_blocked(client, data_dir):
         assert r.status_code == 404, p
         assert "secret" not in r.text
     assert client.get("/files/..%2Fsecret.txt").status_code == 404
+
+
+ROOM_URL = f"/api/rooms/{ROOM}"
+
+
+def test_set_room_size_saves_and_keeps_furniture(client, data_dir):
+    before = saved(data_dir)["objects"]
+    r = client.patch(ROOM_URL, json={"width": 6.2, "depth": 4.5, "height": 2.7})
+    assert r.status_code == 200
+    assert r.json()["room"]["size_xy"] == [6.2, 4.5]
+    assert r.json()["room"]["ceiling_height"] == 2.7
+    disk = saved(data_dir)
+    assert disk["room"]["size_xy"] == [6.2, 4.5]
+    assert disk["room"]["wall_thickness"] == 0.1
+    assert disk["objects"] == before
+
+
+def test_set_room_size_smaller_warns_about_walls(client):
+    # the shelf sits at x = 2.0 with 0.4 m width: outside a 3 m wide room
+    r = client.patch(ROOM_URL, json={"width": 3.0, "depth": 4.0, "height": 2.6})
+    assert {"type": "wall", "object": "shelf"} in r.json()["warnings"]
+
+
+def test_set_room_size_rejects_bad_sizes(client, data_dir):
+    before = saved(data_dir)
+    for body in (
+        {"width": 1.0, "depth": 4.0, "height": 2.6},
+        {"width": 5.0, "depth": 16.0, "height": 2.6},
+        {"width": 5.0, "depth": 4.0, "height": 5.0},
+        {"width": 5.0, "depth": 4.0},
+        {"width": "x", "depth": 4.0, "height": 2.6},
+    ):
+        assert client.patch(ROOM_URL, json=body).status_code == 422, body
+    raw = '{"width": NaN, "depth": 4, "height": 2.6}'
+    assert client.patch(ROOM_URL, content=raw, headers={"content-type": "application/json"}).status_code == 422
+    assert saved(data_dir) == before
+
+
+def test_set_room_size_unknown_room(client):
+    assert client.patch("/api/rooms/nope", json={"width": 5, "depth": 4, "height": 2.6}).status_code == 404

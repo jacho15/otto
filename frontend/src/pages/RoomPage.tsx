@@ -10,6 +10,7 @@ import { useSaveQueue } from '../useSaveQueue'
 import Checkout from './Checkout'
 import DesignPanel from './DesignPanel'
 import { ErrorCard, itemCount } from './Home'
+import RoomSize from './RoomSize'
 import Shop from './Shop'
 
 const STEP = (15 * Math.PI) / 180
@@ -201,9 +202,7 @@ export default function RoomPage() {
         <Link to="/" className="wordmark">otto</Link>
         <div>
           <h1 className="panel-title">{room.name}</h1>
-          <p className="muted">
-            {room.room.size_xy[0]} × {room.room.size_xy[1]} m · {itemCount(visible.length)}
-          </p>
+          <RoomSize room={room} itemCount={itemCount(visible.length)} onSaved={(r) => setRoom(r)} />
         </div>
         <div className="tabs">
           <button className={tab === 'room' ? 'on' : ''} onClick={() => setTab('room')}>Room</button>
@@ -225,7 +224,7 @@ export default function RoomPage() {
           <Checkout roomId={id} orders={orders} setOrders={setOrders} />
         </div>
         {tab === 'shop' ? (
-          <Shop target={replaceTarget} busy={adding} onAdd={addPiece} />
+          <Shop room={room.room} objects={objects} target={replaceTarget} busy={adding} onAdd={addPiece} />
         ) : tab === 'checkout' || tab === 'design' ? null : (
           <>
           <ul className="item-list">

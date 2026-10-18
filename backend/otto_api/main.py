@@ -48,6 +48,13 @@ class ObjectPatch(BaseModel):
     yaw: Number | None = None
 
 
+class RoomSize(BaseModel):
+    """Measured size of a room. Same limits as a new blueprint place."""
+    width: Annotated[float, Field(allow_inf_nan=False, ge=1.5, le=15)]
+    depth: Annotated[float, Field(allow_inf_nan=False, ge=1.5, le=15)]
+    height: Annotated[float, Field(allow_inf_nan=False, ge=2, le=4)]
+
+
 class ObjectAdd(BaseModel):
     catalog_id: str
     replace: str | None = None
@@ -224,6 +231,18 @@ def list_rooms():
 def get_room(room_id: str):
     with lock:
         return room_response(room_id, load_scene(room_id))
+
+
+@app.patch("/api/rooms/{room_id}")
+def set_room_size(room_id: str, body: RoomSize):
+    """Resize the room around its centre. Furniture stays where it is; pieces now outside
+    the walls come back as wall warnings."""
+    with lock:
+        scene = load_scene(room_id)
+        scene["room"]["size_xy"] = [body.width, body.depth]
+        scene["room"]["ceiling_height"] = body.height
+        save_scene(room_id, scene)
+        return room_response(room_id, scene)
 
 
 @app.patch("/api/rooms/{room_id}/objects/{name}")
