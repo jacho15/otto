@@ -106,8 +106,10 @@ def open_client() -> httpx.Client:
     return httpx.Client(timeout=TIMEOUT, follow_redirects=False, trust_env=False)
 
 
-def fetch(url: str, max_bytes: int, accept: str = PAGE_ACCEPT) -> tuple[bytes, str, str]:
-    """Download url. Return (body, content type, final url). Raise FetchError, or BadUrl for a bad address."""
+def fetch(url: str, max_bytes: int, accept: str = PAGE_ACCEPT, allowed=None) -> tuple[bytes, str, str]:
+    """Download url. Return (body, content type, final url). Raise FetchError, or BadUrl for a bad address.
+
+    allowed(url), if given, is checked for the address and for every redirect before it is requested."""
     deadline = time.monotonic() + TIMEOUT
 
     def remaining() -> float:
@@ -121,6 +123,8 @@ def fetch(url: str, max_bytes: int, accept: str = PAGE_ACCEPT) -> tuple[bytes, s
         "Accept-Encoding": "identity",  # so max_bytes counts the bytes that were received
     }
     for _ in range(MAX_REDIRECTS + 1):
+        if allowed and not allowed(url):
+            raise BadUrl("That address isn't allowed.")
         parts, address = check_url(url, remaining())
         host = f"[{address}]" if ":" in address else address
         if parts.port:

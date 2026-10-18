@@ -77,13 +77,13 @@ type FileLike = { name: string; type: string }
 export function fileKind(f: FileLike): FileKind | null {
   const name = f.name.toLowerCase()
   if (/^image\/(jpeg|png|webp)$/.test(f.type) || /\.(jpe?g|png|webp)$/.test(name)) return 'photo'
-  if (name.endsWith('.glb')) return 'model'
+  if (/\.(glb|obj|stl|ply)$/.test(name)) return 'model'
   return null
 }
 
 /** An error message when the file is the wrong kind or too big, otherwise null. */
 export function checkFile(kind: FileKind, f: FileLike & { size: number }): string | null {
-  if (fileKind(f) !== kind) return kind === 'photo' ? 'Choose a JPEG, PNG or WebP photo.' : 'Choose a .glb file.'
+  if (fileKind(f) !== kind) return kind === 'photo' ? 'Choose a JPEG, PNG or WebP photo.' : 'Choose a .glb, .obj, .stl or .ply file.'
   if (kind === 'photo' && f.size > MAX_IMAGE_BYTES) return 'The photo must be 5 MB or smaller.'
   if (kind === 'model' && f.size > MAX_MODEL_BYTES) return 'The model must be 25 MB or smaller.'
   return null
@@ -104,7 +104,7 @@ export type DropIntent<F extends FileLike = File> =
   | { kind: 'link'; url: string }
   | { kind: FileKind; file: F }
 
-/** What a drop on the 3D view means: a photo, a .glb file or a link, or null for anything else. */
+/** What a drop on the 3D view means: a photo, a 3D model file or a link, or null for anything else. */
 export function dropIntent<F extends FileLike>(files: F[], uriList: string, text: string): DropIntent<F> | null {
   for (const file of files) {
     const kind = fileKind(file)

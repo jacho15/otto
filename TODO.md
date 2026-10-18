@@ -24,13 +24,13 @@ Website work only. The video-to-room pipeline is being built on a separate branc
 - [x] "Replace": pick a piece in the room and swap in a product. The old piece shows as a faint ghost, and the new one takes its spot (nudged inside the walls if needed). Removing the new piece brings the old one back.
 - [x] Shop fit badges (Fits / Taller than the ceiling / Bigger than the room / No free floor space), with sorting and "Only what fits"
 - [x] 16 more IKEA products (stand-in shapes at real size)
-- [ ] Saved products (wishlist) shared across all rooms
+- [x] Saved products (wishlist) shared across all rooms: it is the liked list, shown in every room's Shop tab with a heart to like or unlike
 
 ## 2. Add any furniture
 - [x] Paste a product link: read name, price, photo and size from the page on the server (JSON-LD, Open Graph, sizes from the page text)
 - [x] Upload a product photo plus a typed size, which becomes a sized stand-in shape
 - [x] Upload a `.glb` 3D file, scaled to the typed size
-- [ ] Upload `.obj/.stl/.ply` files too, and rescale cm/mm files when no size is given
+- [x] Upload `.obj/.stl/.ply` files too, and rescale cm/mm files when no size is given
 - [x] Drag and drop photos, `.glb` files or links straight onto the 3D view
 - [x] Block private and loopback addresses when downloading links (also redirects, NAT64, size and time limits)
 - [x] "Your items": custom pieces you imported or uploaded, ready to add to any room
@@ -48,7 +48,8 @@ Website work only. The video-to-room pipeline is being built on a separate branc
 - [x] For a selected piece, find cheaper products of the same type in the catalog
 - [x] Fit-check each one without changing the room, and show price and savings
 - [x] One click to swap an alternative in (uses Replace)
-- [ ] Search beyond the catalog (other shops)
+- [x] "Search IKEA for more": Claude searches ikea.com for the same type and a similar size, the server reads each real page for price and size, and only cheaper pieces that fit are shown (also "Find similar at IKEA" for pieces with no price)
+- [ ] Other shops (Amazon, Wayfair, Target, ...) through a shopping search API; their pages block servers, so the extension covers exact product pages for now
 
 ## 4b. "Goes well with" suggestions (GenAI)
 Like "Frequently bought together", but for your room, and you see it live.
@@ -85,9 +86,9 @@ Like "Frequently bought together", but for your room, and you see it live.
 
 ## 8. Look and polish
 - [x] Better lighting: tone mapping, soft shadows, contact shadows, wood floor texture, a "Quality" toggle
-- [ ] Screen-space ambient occlusion
+- [x] Screen-space ambient occlusion
 - [x] "Save image": a PNG of the current view
-- [ ] Photoreal render (path tracing)
+- [x] ~~Photoreal render (path tracing)~~ dropped: not needed for the demo
 - [x] Code-split the frontend bundle (lazy pages; three.js in its own chunk)
 
 ## 9. Later
@@ -96,7 +97,7 @@ Like "Frequently bought together", but for your room, and you see it live.
 ## Known small issues
 - [x] Backend allows deleting a piece the UI marks as not movable; make both sides agree (now 409)
 - [x] Totals add mixed currencies under one currency
-- [ ] Backend lock only covers one server process
+- [x] Backend lock only covers one server process
 - [x] Error card always says to check port 8000, even for "room not found"
 - [x] "Add to room" copies the model into the room's `meshes/` and edits `scene.json`, so testing on the demo room leaves changes in git. Point catalog pieces at the catalog's model file instead.
 - [x] Deleting a piece while its Replace is in flight leaves the new piece with a `replaces` link to nothing (the dangling link is now dropped)

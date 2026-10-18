@@ -14,6 +14,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from filelock import FileLock
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 from .agent import AgentError, make_client, run_checkout
@@ -56,7 +57,38 @@ def validation_error(request, exc):
 
 ROOM_ID = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 DEFAULT_DATA = REPO_ROOT / "data"
-lock = threading.Lock()
+
+
+class DataLock:
+    """One lock for every read-modify-write of the data files. The thread lock covers this
+    process; a lock file in the data dir covers other server processes."""
+
+    def __init__(self):
+        self._thread = threading.Lock()
+        self._file = None
+
+    def __enter__(self):
+        self._thread.acquire()
+        try:
+            folder = data_dir()
+            folder.mkdir(parents=True, exist_ok=True)
+            self._file = FileLock(folder / ".otto.lock")
+            self._file.acquire()
+        except BaseException:
+            self._file = None
+            self._thread.release()
+            raise
+        return self
+
+    def __exit__(self, *exc):
+        file, self._file = self._file, None
+        try:
+            file.release()
+        finally:
+            self._thread.release()
+
+
+lock = DataLock()
 HISTORY_LIMIT = 30
 LAYOUT_LIMIT = 10
 PATCH_MERGE_SECONDS = 2

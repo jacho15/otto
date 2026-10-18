@@ -286,3 +286,34 @@ export interface DataSummary {
   items: DataItem[]
   note: string
 }
+
+/** A piece found on IKEA. It is not in the catalog: swapping it in first saves it as a custom item. */
+export interface IkeaAlternative {
+  id: string
+  title: string
+  label: string
+  url: string
+  price: number | null
+  currency: string
+  size: Vec3 // metres
+  rgba: [number, number, number, number]
+  model: null
+  photo: null
+  source: 'ikea'
+  catalog_id: null
+  image_url: string | null
+  similarity: number // 0 to 1
+  why: string
+  savings: number | null // null when the piece being replaced has no price
+  savings_pct: number | null // whole percent
+  fits: boolean
+  problems: string[]
+}
+
+export interface IkeaResult {
+  object: string
+  price: number | null
+  currency: string
+  alternatives: IkeaAlternative[] // fits first, then the biggest savings
+  message: string
+}

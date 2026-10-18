@@ -66,6 +66,9 @@ describe('files', () => {
     expect(fileKind({ name: 'a.jpg', type: 'image/jpeg' })).toBe('photo')
     expect(fileKind({ name: 'A.PNG', type: '' })).toBe('photo')
     expect(fileKind({ name: 'chair.glb', type: '' })).toBe('model')
+    expect(fileKind({ name: 'chair.OBJ', type: '' })).toBe('model')
+    expect(fileKind({ name: 'chair.stl', type: '' })).toBe('model')
+    expect(fileKind({ name: 'chair.ply', type: '' })).toBe('model')
     expect(fileKind({ name: 'a.gif', type: 'image/gif' })).toBeNull()
     expect(fileKind({ name: 'notes.txt', type: 'text/plain' })).toBeNull()
   })
@@ -75,7 +78,7 @@ describe('files', () => {
     expect(checkFile('photo', { name: 'a.png', type: 'image/png', size: 6 * 1024 * 1024 })).toBe('The photo must be 5 MB or smaller.')
     expect(checkFile('photo', { name: 'a.glb', type: '', size: 1 })).toBe('Choose a JPEG, PNG or WebP photo.')
     expect(checkFile('model', { name: 'a.glb', type: '', size: 26 * 1024 * 1024 })).toBe('The model must be 25 MB or smaller.')
-    expect(checkFile('model', { name: 'a.png', type: 'image/png', size: 1 })).toBe('Choose a .glb file.')
+    expect(checkFile('model', { name: 'a.png', type: 'image/png', size: 1 })).toBe('Choose a .glb, .obj, .stl or .ply file.')
   })
 
   it('makes a title from the file name', () => {

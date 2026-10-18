@@ -304,7 +304,7 @@ export default function RoomPage() {
     [save, resync],
   )
 
-  // A link, photo or .glb file dropped on the 3D view opens the Add card in the Shop tab.
+  // A link, photo or 3D model file (.glb, .obj, .stl, .ply) dropped on the 3D view opens the Add card in the Shop tab.
   const canDrop = (e: DragEvent) => ['Files', 'text/uri-list', 'text/plain'].some((t) => e.dataTransfer?.types.includes(t))
 
   const onDrop = (e: DragEvent) => {
@@ -314,7 +314,7 @@ export default function RoomPage() {
     const data = e.dataTransfer
     if (!data) return
     const intent = dropIntent(Array.from(data.files), data.getData('text/uri-list'), data.getData('text/plain'))
-    if (!intent) return setSaveError('Drop a link, a photo (JPEG, PNG or WebP) or a .glb file.')
+    if (!intent) return setSaveError('Drop a link, a photo (JPEG, PNG or WebP) or a .glb, .obj, .stl or .ply file.')
     setSaveError(null)
     setDrop({ ...intent, id: ++dropCount.current })
     setTab('shop')
@@ -417,7 +417,7 @@ export default function RoomPage() {
           onDrag={onDrag}
           onDragEnd={onDragEnd}
         />
-        {dropping && <div className="drop-overlay">Drop a link, photo or .glb file to add it</div>}
+        {dropping && <div className="drop-overlay">Drop a link, photo or 3D file (.glb, .obj, .stl, .ply) to add it</div>}
       </div>
       <aside className="panel">
         <Link to="/" className="wordmark">otto</Link>
@@ -489,7 +489,7 @@ export default function RoomPage() {
           <Shop room={room.room} door={room.door} objects={objects} target={replaceTarget} busy={adding} onAdd={addPiece} />
         ) : tab === 'checkout' || tab === 'design' || tab === 'chat' ? null : (
           <>
-          {selectedObj?.movable && selectedObj.product?.price != null && (
+          {selectedObj?.movable && (
             <Alternatives
               roomId={id}
               piece={selectedObj}
@@ -497,6 +497,7 @@ export default function RoomPage() {
               serverVersion={serverVersion}
               busy={adding}
               onSwap={(catalogId) => addPiece(catalogId, selectedObj.name)}
+              onItemSaved={(item) => setCustomItems((list) => [item, ...list.filter((x) => x.id !== item.id)])}
             />
           )}
           <ul className="item-list">

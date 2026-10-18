@@ -7,6 +7,7 @@ import type {
   CustomItem,
   DataSummary,
   DesignResult,
+  IkeaResult,
   Layout,
   LinkDraft,
   Mandate,
@@ -207,3 +208,7 @@ export const deleteData = (kind: string) =>
 export function formatPrice(amount: number, currency = 'USD') {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
 }
+
+/** Search IKEA live for pieces like this one. Takes 20 to 45 seconds. Nothing in the room changes. */
+export const searchIkea = (id: string, name: string) =>
+  request<IkeaResult>(`${objectUrl(id, name)}/alternatives/ikea`, { method: 'POST' })

@@ -14,6 +14,7 @@ import {
   type FileKind,
   type SizeUnit,
 } from '../furnitureLogic'
+import { convertToGlb, modelFormat } from '../modelConvert'
 import type { CustomItem, NewCustomItem, Vec3 } from '../types'
 
 interface Props {
@@ -31,7 +32,7 @@ type Mode = 'link' | 'photo' | 'model'
 const MODE_TEXT: Record<Mode, string> = { link: 'Link', photo: 'Photo', model: '3D file' }
 const ACCEPT: Record<FileKind, string> = {
   photo: 'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp',
-  model: '.glb,model/gltf-binary',
+  model: '.glb,.obj,.stl,.ply,model/gltf-binary',
 }
 
 interface Form {
@@ -114,10 +115,20 @@ export default function AddFurniture({ busy, intent, onSaved, onAdd }: Props) {
       return setError(problem)
     }
     start(async (isLatest) => {
-      const r = await uploadFile(file)
+      // .obj, .stl and .ply become a .glb first. With no typed size, the size comes from the model.
+      const converted = kind === 'model' && modelFormat(file.name) ? await convertToGlb(file) : null
+      if (!isLatest()) return
+      const r = await uploadFile(converted?.file ?? file)
       if (!isLatest()) return
       setUnit('cm')
-      setForm({ ...blankForm, title: titleFromFile(file.name), photo: kind === 'photo' ? r.url : null, model: kind === 'model' ? r.url : null })
+      setForm({
+        ...blankForm,
+        title: titleFromFile(file.name),
+        size: sizeTexts(converted?.size ?? null, 'cm'),
+        notes: converted ? [converted.note] : [],
+        photo: kind === 'photo' ? r.url : null,
+        model: kind === 'model' ? r.url : null,
+      })
     }, 'uploading')
   }
 
@@ -235,7 +246,7 @@ export default function AddFurniture({ busy, intent, onSaved, onAdd }: Props) {
             </form>
           ) : (
             <label className="furniture-file">
-              <span className="muted">{mode === 'photo' ? 'A photo (JPEG, PNG or WebP, up to 5 MB)' : 'A .glb model (up to 25 MB)'}</span>
+              <span className="muted">{mode === 'photo' ? 'A photo (JPEG, PNG or WebP, up to 5 MB)' : 'A .glb, .obj, .stl or .ply model (up to 25 MB)'}</span>
               <input
                 type="file"
                 accept={ACCEPT[mode]}

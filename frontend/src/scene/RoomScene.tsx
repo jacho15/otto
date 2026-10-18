@@ -12,6 +12,8 @@ import {
   useGLTF,
   useProgress,
 } from '@react-three/drei'
+import { EffectComposer, N8AO, ToneMapping } from '@react-three/postprocessing'
+import { ToneMappingMode, type EffectComposer as EffectComposerImpl } from 'postprocessing'
 import {
   Box3,
   Color,
@@ -55,6 +57,7 @@ const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0)
 const GRID_STEP = 0.5 // metres
 const GHOST_OPACITY = 0.15
 const PREVIEW_OPACITY = 0.45
+const BACKGROUND_TONE_MAPPED: [number, number, number] = [2.9462, 2.2915, 1.581]
 
 type View = 'persp' | 'top'
 type Quality = 'high' | 'low'
@@ -114,6 +117,7 @@ export default function RoomScene(props: Props) {
   const [quality, setQuality] = useState(loadQuality)
   const high = quality === 'high'
   const capture = useRef<(() => void) | null>(null)
+  const composer = useRef<EffectComposerImpl | null>(null)
   const pointCloud = room.room.point_cloud
   const selectedObj = objects.find((o) => o.name === selected && !o.hidden)
 
@@ -182,7 +186,8 @@ export default function RoomScene(props: Props) {
         ) : (
           <TopCamera W={W} D={D} />
         )}
-        <color attach="background" args={['#F7F4EF']} />
+        {/* With the effects on, the whole picture is tone mapped, background included. These linear values come out as #F7F4EF. */}
+        <color attach="background" key={high ? 'ao' : 'plain'} args={high ? BACKGROUND_TONE_MAPPED : ['#F7F4EF']} />
         <hemisphereLight args={['#ffffff', '#d9cfbf', 0.5]} />
         <directionalLight
           position={lightPos}
@@ -263,7 +268,15 @@ export default function RoomScene(props: Props) {
           </Suspense>
         )}
 
-        <CaptureBridge capture={capture} filename={`otto-${room.id}.png`} />
+        {/* Soft ambient occlusion in High quality. The composer turns off the renderer's tone mapping, so it is redone last. */}
+        {high && (
+          <EffectComposer ref={composer}>
+            <N8AO aoRadius={0.5} distanceFalloff={0.6} intensity={1.5} halfRes />
+            <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+          </EffectComposer>
+        )}
+
+        <CaptureBridge capture={capture} composer={composer} filename={`otto-${room.id}.png`} />
         <DragController drag={drag} snapPos={snapPos} onDrag={props.onDrag} onDragEnd={props.onDragEnd} />
         <OrbitControls
           key={view}
@@ -281,7 +294,7 @@ export default function RoomScene(props: Props) {
         <button className={view === 'persp' ? 'on' : ''} onClick={() => setView('persp')}>3D view</button>
         <button className={view === 'top' ? 'on' : ''} onClick={() => setView('top')}>Top view</button>
         <button className={snap ? 'on' : ''} onClick={toggleSnap}>Snap</button>
-        <button className={high ? 'on' : ''} title="Shadows and a wood floor. Switch to Low on a slow computer." onClick={toggleQuality}>
+        <button className={high ? 'on' : ''} title="Shadows, soft corner shading and a wood floor. Switch to Low on a slow computer." onClick={toggleQuality}>
           Quality: {high ? 'High' : 'Low'}
         </button>
         <button onClick={() => capture.current?.()}>Save image</button>
@@ -317,12 +330,21 @@ function Floor({ W, D, wood, onClick }: { W: number; D: number; wood: boolean; o
 }
 
 /** Hands the toolbar a function that downloads the current view as a PNG. */
-function CaptureBridge({ capture, filename }: { capture: RefObject<(() => void) | null>; filename: string }) {
+function CaptureBridge({
+  capture,
+  composer,
+  filename,
+}: {
+  capture: RefObject<(() => void) | null>
+  composer: RefObject<EffectComposerImpl | null>
+  filename: string
+}) {
   const { gl, scene, camera } = useThree()
   useEffect(() => {
     capture.current = () => {
       // Draw a fresh frame and read it in the same task, before the browser clears the buffer.
-      gl.render(scene, camera)
+      if (composer.current) composer.current.render()
+      else gl.render(scene, camera)
       gl.domElement.toBlob((blob) => {
         if (!blob) return
         const url = URL.createObjectURL(blob)
@@ -336,7 +358,7 @@ function CaptureBridge({ capture, filename }: { capture: RefObject<(() => void) 
     return () => {
       capture.current = null
     }
-  }, [gl, scene, camera, capture, filename])
+  }, [gl, scene, camera, capture, composer, filename])
   return null
 }
 

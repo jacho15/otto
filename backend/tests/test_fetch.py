@@ -241,3 +241,21 @@ def test_slow_lookup_hits_the_deadline(net, monkeypatch):
         assert time.monotonic() - started < 2
     finally:
         release.set()
+
+
+def test_allowed_is_checked_on_every_hop(net):
+    net.hosts["other.test"] = "93.184.216.36"
+
+    def redirect(request):
+        return httpx.Response(302, headers={"location": "https://other.test/x"})
+
+    net.handler = redirect
+    with pytest.raises(BadUrl, match="isn't allowed"):
+        fetch.fetch("https://example.com/x", 100, allowed=lambda u: "example.com" in u)
+    assert len(net.calls) == 1  # the second request is never made
+
+
+def test_allowed_refuses_the_first_address_too(net):
+    with pytest.raises(BadUrl):
+        fetch.fetch("http://example.com/x", 100, allowed=lambda u: u.startswith("https:"))
+    assert net.calls == []

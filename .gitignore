@@ -15,3 +15,4 @@ data/rooms/*/layouts.json
 data/rooms/*/chat.json
 data/rooms/*
 !data/rooms/demo-living-room/
+data/.otto.lock
