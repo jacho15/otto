@@ -339,6 +339,33 @@ a {
   margin-top: 6px;
 }
 
+.alt-row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.alt-row .shop-photo {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 24px;
+}
+
+.alt-info {
+  display: grid;
+  gap: 4px;
+}
+
+.alt-save {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
 .btn {
   background: var(--surface);
   border: 1px solid var(--line);

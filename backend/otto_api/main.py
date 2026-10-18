@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, StringConstraints, field_validator
 from .agent import AgentError, make_client, run_checkout
 from .checkout import MockVisaProvider, approval_violations
 from .fit import find_warnings
+from .alternatives import router as alternatives_router
 from .place import add_at, add_item
 from .places import router as places_router
 from .suggest import router as suggest_router
@@ -27,6 +28,7 @@ load_dotenv(REPO_ROOT / ".env")
 app = FastAPI(title="Otto API")
 app.include_router(places_router)
 app.include_router(suggest_router)
+app.include_router(alternatives_router)
 
 
 @app.exception_handler(RequestValidationError)

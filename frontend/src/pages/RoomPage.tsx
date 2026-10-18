@@ -8,6 +8,7 @@ import { mergeServerObjects } from '../saveLogic'
 import { acceptError, previewObject } from '../suggestLogic'
 import type { Order, Room, RoomObject, Suggestion, Vec2 } from '../types'
 import { useSaveQueue } from '../useSaveQueue'
+import Alternatives from './Alternatives'
 import Checkout from './Checkout'
 import DesignPanel from './DesignPanel'
 import { ErrorCard, itemCount } from './Home'
@@ -29,6 +30,7 @@ export default function RoomPage() {
   const [adding, setAdding] = useState(false)
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
   const [orders, setOrders] = useState<Order[]>([])
+  const [serverVersion, setServerVersion] = useState(0) // bumped whenever a server response is applied
   const draggingRef = useRef<string | null>(null)
   const resyncAfterDrag = useRef(false)
   const addingRef = useRef(false)
@@ -54,6 +56,7 @@ export default function RoomPage() {
   const onResult = useCallback((r: Room, pending: Set<string>) => {
     setSaveError(null)
     setObjects((local) => mergeServerObjects(local, r.objects, draggingRef.current, pending))
+    setServerVersion((v) => v + 1)
   }, [])
 
   // After a failed save, replace local state with the server's.
@@ -63,6 +66,7 @@ export default function RoomPage() {
     getRoom(id).then(
       (r) => {
         setRoom(r)
+        setServerVersion((v) => v + 1)
         if (epoch === addEpoch.current) {
           setObjects(r.objects)
           setSelected((s) => (s && r.objects.some((o) => o.name === s) ? s : null))
@@ -91,6 +95,7 @@ export default function RoomPage() {
           setObjects((local) => mergeServerObjects(local, r.objects, draggingRef.current, pending(), r.added))
           setSelected(r.added)
           addEpoch.current++
+          setServerVersion((v) => v + 1)
         } catch (e) {
           setSaveError((e as Error).message)
         } finally {
@@ -119,6 +124,7 @@ export default function RoomPage() {
             setObjects((local) => mergeServerObjects(local, r.objects, draggingRef.current, pending(), r.added))
             setSelected(r.added)
             addEpoch.current++
+            setServerVersion((v) => v + 1)
             setSuggestions((list) => list.filter((x) => x.catalog_id !== s.catalog_id))
           } catch (e) {
             failure = acceptError(e)
@@ -240,7 +246,10 @@ export default function RoomPage() {
         <Link to="/" className="wordmark">otto</Link>
         <div>
           <h1 className="panel-title">{room.name}</h1>
-          <RoomSize room={room} itemCount={itemCount(visible.length)} onSaved={(r) => setRoom(r)} />
+          <RoomSize room={room} itemCount={itemCount(visible.length)} onSaved={(r) => {
+            setRoom(r)
+            setServerVersion((v) => v + 1)
+          }} />
         </div>
         <div className="tabs">
           <button className={tab === 'room' ? 'on' : ''} onClick={() => setTab('room')}>Room</button>
@@ -255,6 +264,7 @@ export default function RoomPage() {
             onRoom={(r) => {
               setRoom(r)
               setObjects(r.objects)
+              setServerVersion((v) => v + 1)
             }}
           />
         </div>
@@ -275,6 +285,15 @@ export default function RoomPage() {
           <Shop room={room.room} objects={objects} target={replaceTarget} busy={adding} onAdd={addPiece} />
         ) : tab === 'checkout' || tab === 'design' ? null : (
           <>
+          {selectedObj?.movable && selectedObj.product?.price != null && (
+            <Alternatives
+              roomId={id}
+              piece={selectedObj}
+              serverVersion={serverVersion}
+              busy={adding}
+              onSwap={(catalogId) => addPiece(catalogId, selectedObj.name)}
+            />
+          )}
           <ul className="item-list">
             {visible.map((o) => (
               <li key={o.name}>

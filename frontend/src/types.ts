@@ -160,6 +160,21 @@ export interface Suggestion {
   violations: string[]
 }
 
+export interface Alternative extends CatalogItem {
+  shape?: string
+  savings: number
+  savings_pct: number // whole percent
+  fits: boolean
+  problems: string[]
+}
+
+export interface AlternativesResult {
+  object: string
+  price: number | null
+  currency: string
+  alternatives: Alternative[] // fits first, then the biggest savings
+}
+
 export interface SuggestResult {
   message: string
   suggestions: Suggestion[]

@@ -1,5 +1,6 @@
 import type {
   AddResult,
+  AlternativesResult,
   CatalogItem,
   DesignResult,
   Mandate,
@@ -53,6 +54,9 @@ export const patchObject = (id: string, name: string, body: { pos?: Vec2; yaw?: 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
+
+export const getAlternatives = (id: string, name: string) =>
+  request<AlternativesResult>(`${objectUrl(id, name)}/alternatives`)
 
 export const deleteObject = (id: string, name: string) =>
   request<Room>(objectUrl(id, name), { method: 'DELETE' })
