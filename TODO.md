@@ -73,8 +73,8 @@ Like "Frequently bought together", but for your room, and you see it live.
 - [x] The agent has no tool that can change the mandate or approve an order
 - [x] Mock payment that never claims a real purchase, behind a provider interface so a Visa API can be swapped in
 - [x] "Why" line on each proposed item
-- [ ] Totals per currency (caps assume one currency today)
-- [ ] "Your data" panel (what is kept, how to delete it)
+- [x] Totals per currency; the mandate has its own currency and other currencies are flagged
+- [x] "Your data" panel (what is kept, how to delete it)
 
 ## 7. Rooms and pipeline hookup
 - [ ] Upload a room video from the home page and show build progress (job polling)
@@ -84,16 +84,18 @@ Like "Frequently bought together", but for your room, and you see it live.
 - [x] Optional toggle to show the scan's point cloud
 
 ## 8. Look and polish
-- [ ] Better lighting: tone mapping, soft shadows, ambient occlusion, wood floor texture, a "Quality" toggle
-- [ ] Render button: a photoreal still of the room
-- [ ] Code-split the frontend bundle (currently 1.35 MB)
+- [x] Better lighting: tone mapping, soft shadows, contact shadows, wood floor texture, a "Quality" toggle
+- [ ] Screen-space ambient occlusion
+- [x] "Save image": a PNG of the current view
+- [ ] Photoreal render (path tracing)
+- [x] Code-split the frontend bundle (lazy pages; three.js in its own chunk)
 
 ## 9. Later
 - [x] Chrome extension: "Put in my room" from any product page (reads name, price, photo and size; falls back to reading the open page for shops that block servers)
 
 ## Known small issues
 - [x] Backend allows deleting a piece the UI marks as not movable; make both sides agree (now 409)
-- [ ] Totals add mixed currencies under one currency
+- [x] Totals add mixed currencies under one currency
 - [ ] Backend lock only covers one server process
 - [x] Error card always says to check port 8000, even for "room not found"
 - [x] "Add to room" copies the model into the room's `meshes/` and edits `scene.json`, so testing on the demo room leaves changes in git. Point catalog pieces at the catalog's model file instead.

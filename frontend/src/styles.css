@@ -1021,3 +1021,57 @@ a {
   color: var(--muted);
   cursor: pointer;
 }
+
+/* Several currencies in one total */
+
+.money-lines {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+/* Your data */
+
+.text-link.data-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+.home-links .data-link {
+  margin-top: 0;
+  font-size: inherit;
+}
+
+.data-dialog {
+  max-width: 420px;
+  width: 100%;
+}
+
+.data-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.data-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.data-row .btn {
+  padding: 4px 12px;
+  flex-shrink: 0;
+}

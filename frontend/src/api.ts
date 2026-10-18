@@ -5,6 +5,7 @@ import type {
   ChatReply,
   ChatState,
   CustomItem,
+  DataSummary,
   DesignResult,
   Layout,
   LinkDraft,
@@ -195,6 +196,13 @@ export const meshUrl = (id: string, mesh: string) =>
     : mesh.startsWith('catalog/')
       ? catalogFileUrl(mesh.slice('catalog/'.length))
       : `/files/${encodeURIComponent(id)}/${mesh.split('/').map(encodeURIComponent).join('/')}`
+
+/** What Otto stores about you, by kind. */
+export const getData = () => request<DataSummary>('/api/data')
+
+/** Delete one kind (mandate, orders, chats, history, layouts, saved or custom). Answers the new summary. */
+export const deleteData = (kind: string) =>
+  request<DataSummary>(`/api/data/${encodeURIComponent(kind)}`, { method: 'DELETE' })
 
 export function formatPrice(amount: number, currency = 'USD') {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)

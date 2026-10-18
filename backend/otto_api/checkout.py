@@ -45,28 +45,53 @@ def money(amount, currency):
     return f"{amount:.2f} {currency}"
 
 
+def currency_totals(items):
+    """Sums per currency, sorted by currency: [{"currency", "amount"}]. items: dicts with price, currency."""
+    sums = {}
+    for item in items:
+        currency = item.get("currency") or "USD"
+        sums[currency] = sums.get(currency, 0) + item["price"]
+    return [{"currency": c, "amount": round(sums[c], 2)} for c in sorted(sums)]
+
+
+def single_total(totals):
+    """One total for the old `total` field. Several currencies give an amount of None and MIXED."""
+    if len(totals) > 1:
+        return {"amount": None, "currency": "MIXED"}
+    return dict(totals[0]) if totals else {"amount": 0.0, "currency": "USD"}
+
+
 def mandate_violations(items, mandate, today):
     """Reasons the items break the mandate. An empty list means they fit.
 
     items: dicts with title, url, price, currency. today: a local date.
+    The caps are in the mandate's currency (USD if it names none).
     """
     if not mandate:
         return ["No spend mandate is set."]
     problems = []
     if mandate.get("expires") and today > date.fromisoformat(mandate["expires"]):
         problems.append(f"The mandate expired on {mandate['expires']}.")
+    currency = mandate.get("currency") or "USD"
+    counted = []
+    for item in items:
+        if (item.get("currency") or "USD") == currency:
+            counted.append(item)
+        else:
+            problems.append(
+                f"{item['title']}: Price is in {item.get('currency') or 'USD'}; your limits are in {currency}."
+            )
     cap = mandate.get("max_item_price")
     if cap is not None:
-        for item in items:
+        for item in counted:
             if item["price"] > cap:
                 problems.append(
-                    f"{item['title']} costs {money(item['price'], item['currency'])}, "
+                    f"{item['title']} costs {money(item['price'], currency)}, "
                     f"over the per-item limit of {cap:.2f}."
                 )
     cap = mandate.get("max_total")
-    total = round(sum(item["price"] for item in items), 2)
+    total = round(sum(item["price"] for item in counted), 2)
     if cap is not None and total > cap:
-        currency = items[0]["currency"] if items else ""
         problems.append(f"The total {money(total, currency)} is over the limit of {cap:.2f}.")
     shops = mandate.get("shops") or []
     if shops:
@@ -104,6 +129,8 @@ def approval_violations(order, objects, orders, mandate, today):
             problems.append(f"{item['title']} is gone, hidden or already bought.")
         elif product["price"] != item["price"]:
             problems.append(f"The price of {item['title']} changed since the order was proposed.")
+        elif (product.get("currency") or "USD") != (item.get("currency") or "USD"):
+            problems.append(f"The currency of {item['title']} changed since the order was proposed.")
         elif (product.get("url") or "") != item["url"]:
             problems.append(f"The link for {item['title']} changed since the order was proposed.")
     return problems + mandate_violations(order["items"], mandate, today)

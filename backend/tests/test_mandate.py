@@ -72,3 +72,14 @@ def test_put_rejects_nan_and_infinity(client):
 def test_put_accepts_limits(client):
     body = {**BODY, "shops": ["x" * 100] * 10}
     assert client.put("/api/mandate", json=body).status_code == 200
+
+
+def test_currency_defaults_to_usd_and_is_uppercased(client):
+    assert client.put("/api/mandate", json=BODY).json()["currency"] == "USD"
+    m = client.put("/api/mandate", json={**BODY, "currency": "eur"}).json()
+    assert m["currency"] == "EUR" and client.get("/api/mandate").json()["currency"] == "EUR"
+
+
+@pytest.mark.parametrize("currency", ["US", "DOLLARS", "U$D", "", 5])
+def test_currency_validation(client, currency):
+    assert client.put("/api/mandate", json={**BODY, "currency": currency}).status_code == 422

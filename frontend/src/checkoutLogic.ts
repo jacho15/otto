@@ -1,6 +1,9 @@
 import { ApiError, formatPrice } from './api'
 import type { Mandate, Order, OrderItem } from './types'
 
+/** Currencies the spend mandate can be set in. */
+export const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'SEK']
+
 /** "ikea.com, IKEA.com ," -> ["ikea.com"] */
 export function parseShops(text: string): string[] {
   const shops = text.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
@@ -23,9 +26,10 @@ export function parseLimit(text: string): number | null | undefined {
 }
 
 export function mandateSummary(m: Mandate): string[] {
+  const currency = m.currency ?? 'USD'
   return [
-    m.max_item_price == null ? 'No limit per item' : `Up to ${formatPrice(m.max_item_price)} per item`,
-    m.max_total == null ? 'No limit per order' : `Up to ${formatPrice(m.max_total)} per order`,
+    m.max_item_price == null ? 'No limit per item' : `Up to ${formatPrice(m.max_item_price, currency)} per item`,
+    m.max_total == null ? 'No limit per order' : `Up to ${formatPrice(m.max_total, currency)} per order`,
     `Shops: ${m.shops.join(', ')}`,
     m.expires ? `Expires ${m.expires}` : 'No expiry',
   ]
@@ -75,16 +79,21 @@ function allowedShop(url: string, shops: string[]): boolean {
 export function currentViolations(items: OrderItem[], mandate: Mandate, today = new Date()): string[] {
   const problems: string[] = []
   if (mandate.expires && defaultExpiry(today, 0) > mandate.expires) problems.push(`The mandate expired on ${mandate.expires}.`)
+  const currency = mandate.currency || 'USD'
+  const counted: OrderItem[] = []
+  for (const i of items) {
+    if ((i.currency || 'USD') === currency) counted.push(i)
+    else problems.push(`${i.title}: Price is in ${i.currency || 'USD'}; your limits are in ${currency}.`)
+  }
   if (mandate.max_item_price != null) {
-    for (const i of items) {
+    for (const i of counted) {
       if (i.price > mandate.max_item_price) {
-        problems.push(`${i.title} costs ${formatPrice(i.price, i.currency)}, over the per-item limit of ${formatPrice(mandate.max_item_price, i.currency)}.`)
+        problems.push(`${i.title} costs ${formatPrice(i.price, currency)}, over the per-item limit of ${formatPrice(mandate.max_item_price, currency)}.`)
       }
     }
   }
-  const total = items.reduce((sum, i) => sum + i.price, 0)
+  const total = counted.reduce((sum, i) => sum + i.price, 0)
   if (mandate.max_total != null && Math.round(total * 100) / 100 > mandate.max_total) {
-    const currency = items[0]?.currency
     problems.push(`The total ${formatPrice(total, currency)} is over the limit of ${formatPrice(mandate.max_total, currency)}.`)
   }
   if (mandate.shops.length > 0) {

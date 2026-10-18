@@ -173,7 +173,7 @@ def run_chat(client, room_id, text):
         """Read the user's spend mandate: item cap, total cap, allowed shops, expiry date. Read only."""
         with main.lock:
             mandate = main.load_mandate()
-        keys = ("max_item_price", "max_total", "shops", "expires")
+        keys = ("max_item_price", "max_total", "currency", "shops", "expires")
         return json.dumps({k: mandate.get(k) for k in keys} if mandate else None)
 
     @beta_tool(input_schema=URL_SCHEMA, strict=True)

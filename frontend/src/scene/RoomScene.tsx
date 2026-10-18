@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Canvas, useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber'
 import {
+  ContactShadows,
   Environment,
   Html,
   Lightformer,
@@ -41,6 +42,7 @@ import {
 } from '../geometry'
 import type { Room, RoomObject, Vec2, Vec3 } from '../types'
 import { fitTransform } from './fitModel'
+import { makeFloorTexture } from './floorTexture'
 import ModelBoundary from './ModelBoundary'
 import StandIn from './StandIn'
 
@@ -48,12 +50,14 @@ const ACCENT = '#2F5D50'
 const WARN = '#C2412D'
 const CAUTION = '#B7791F'
 const SNAP_KEY = 'otto.snap'
+const QUALITY_KEY = 'otto.quality'
 const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0)
 const GRID_STEP = 0.5 // metres
 const GHOST_OPACITY = 0.15
 const PREVIEW_OPACITY = 0.45
 
 type View = 'persp' | 'top'
+type Quality = 'high' | 'low'
 
 interface Props {
   room: Room
@@ -83,6 +87,14 @@ function loadSnap(): boolean {
   }
 }
 
+function loadQuality(): Quality {
+  try {
+    return localStorage.getItem(QUALITY_KEY) === 'low' ? 'low' : 'high'
+  } catch {
+    return 'high'
+  }
+}
+
 /** Room-frame (x, y) where a ray hits the floor, or null. */
 function floorHit(ray: Ray): Vec2 | null {
   const p = ray.intersectPlane(FLOOR_PLANE, new Vector3())
@@ -99,6 +111,9 @@ export default function RoomScene(props: Props) {
   const [view, setView] = useState<View>('persp')
   const [showPoints, setShowPoints] = useState(false)
   const [snap, setSnap] = useState(loadSnap)
+  const [quality, setQuality] = useState(loadQuality)
+  const high = quality === 'high'
+  const capture = useRef<(() => void) | null>(null)
   const pointCloud = room.room.point_cloud
   const selectedObj = objects.find((o) => o.name === selected && !o.hidden)
 
@@ -125,6 +140,21 @@ export default function RoomScene(props: Props) {
     }
   }
 
+  const toggleQuality = () => {
+    const next: Quality = high ? 'low' : 'high'
+    setQuality(next)
+    try {
+      localStorage.setItem(QUALITY_KEY, next)
+    } catch {
+      // storage unavailable: the choice only lasts this visit
+    }
+  }
+
+  // The light looks at the room's centre; its shadow box is a cube around everything within reach of the floor centre.
+  const lightPos: Vec3 = [span * 0.6, span * 1.4, span * 0.8]
+  const lightDist = Math.hypot(...lightPos)
+  const reach = Math.hypot(W / 2, room.room.ceiling_height, D / 2)
+
   const startDrag = (obj: RoomObject, e: ThreeEvent<PointerEvent>) => {
     const hit = floorHit(e.ray)
     if (!hit) return
@@ -134,7 +164,12 @@ export default function RoomScene(props: Props) {
 
   return (
     <>
-      <Canvas shadows onPointerMissed={() => onSelect(null)}>
+      {/* R3F already renders with ACES filmic tone mapping and sRGB output, so neither is set here. */}
+      <Canvas
+        shadows={high ? 'percentage' : false}
+        dpr={[1, high ? 2 : 1]}
+        onPointerMissed={() => onSelect(null)}
+      >
         {/* The floor plan uses a true orthographic camera so tall furniture never pokes past the walls. */}
         {view === 'persp' ? (
           <PerspectiveCamera
@@ -150,15 +185,19 @@ export default function RoomScene(props: Props) {
         <color attach="background" args={['#F7F4EF']} />
         <hemisphereLight args={['#ffffff', '#d9cfbf', 0.5]} />
         <directionalLight
-          position={[span * 0.6, span * 1.4, span * 0.8]}
+          position={lightPos}
           intensity={1.6}
-          castShadow
+          castShadow={high}
           shadow-mapSize={[2048, 2048]}
-          shadow-bias={-0.0005}
-          shadow-camera-left={-span}
-          shadow-camera-right={span}
-          shadow-camera-top={span}
-          shadow-camera-bottom={-span}
+          shadow-bias={-0.0004}
+          shadow-normalBias={0.02}
+          shadow-radius={4}
+          shadow-camera-left={-reach}
+          shadow-camera-right={reach}
+          shadow-camera-top={reach}
+          shadow-camera-bottom={-reach}
+          shadow-camera-near={Math.max(0.1, lightDist - reach)}
+          shadow-camera-far={lightDist + reach}
         />
         <Environment resolution={128}>
           <Lightformer intensity={1.2} position={[0, 5, 0]} rotation-x={Math.PI / 2} scale={[10, 10, 1]} />
@@ -166,16 +205,21 @@ export default function RoomScene(props: Props) {
           <Lightformer intensity={0.4} position={[-5, 2, 0]} rotation-y={Math.PI / 2} scale={[10, 4, 1]} />
         </Environment>
 
-        <mesh
-          rotation-x={-Math.PI / 2}
-          receiveShadow
-          onClick={(e) => {
-            if (e.delta < 5) onSelect(null)
-          }}
-        >
-          <planeGeometry args={[W, D]} />
-          <meshStandardMaterial color="#E8DFD0" roughness={0.9} />
-        </mesh>
+        <Floor W={W} D={D} wood={high} onClick={() => onSelect(null)} />
+        {/* Always mounted: drei does not free its render targets on unmount. Hidden and paused in Low quality.
+            Its camera starts 3 cm up so the floor, grid and outlines drawn on it stay out of the shadow. */}
+        <ContactShadows
+          position={[0, 0.002, 0]}
+          visible={high}
+          frames={high ? Infinity : 0}
+          width={W}
+          height={D}
+          near={0.03}
+          far={2}
+          blur={2.5}
+          opacity={0.55}
+          resolution={1024}
+        />
         <FloorGrid W={W} D={D} />
         <Walls W={W} D={D} H={room.room.ceiling_height} t={room.room.wall_thickness} />
 
@@ -219,6 +263,7 @@ export default function RoomScene(props: Props) {
           </Suspense>
         )}
 
+        <CaptureBridge capture={capture} filename={`otto-${room.id}.png`} />
         <DragController drag={drag} snapPos={snapPos} onDrag={props.onDrag} onDragEnd={props.onDragEnd} />
         <OrbitControls
           key={view}
@@ -236,6 +281,10 @@ export default function RoomScene(props: Props) {
         <button className={view === 'persp' ? 'on' : ''} onClick={() => setView('persp')}>3D view</button>
         <button className={view === 'top' ? 'on' : ''} onClick={() => setView('top')}>Top view</button>
         <button className={snap ? 'on' : ''} onClick={toggleSnap}>Snap</button>
+        <button className={high ? 'on' : ''} title="Shadows and a wood floor. Switch to Low on a slow computer." onClick={toggleQuality}>
+          Quality: {high ? 'High' : 'Low'}
+        </button>
+        <button onClick={() => capture.current?.()}>Save image</button>
         {pointCloud && (
           <button className={showPoints ? 'on' : ''} onClick={() => setShowPoints((v) => !v)}>Scan points</button>
         )}
@@ -243,6 +292,52 @@ export default function RoomScene(props: Props) {
       <LoadingNote />
     </>
   )
+}
+
+/** The floor: light wood planks, or one plain colour in Low quality. */
+function Floor({ W, D, wood, onClick }: { W: number; D: number; wood: boolean; onClick: () => void }) {
+  const gl = useThree((s) => s.gl)
+  const texture = useMemo(
+    () => (wood ? makeFloorTexture(W, D, Math.min(8, gl.capabilities.getMaxAnisotropy())) : null),
+    [wood, W, D, gl],
+  )
+  useEffect(() => () => texture?.dispose(), [texture])
+  return (
+    <mesh
+      rotation-x={-Math.PI / 2}
+      receiveShadow
+      onClick={(e) => {
+        if (e.delta < 5) onClick()
+      }}
+    >
+      <planeGeometry args={[W, D]} />
+      <meshStandardMaterial key={texture ? 'wood' : 'plain'} color={texture ? '#ffffff' : '#E8DFD0'} map={texture} roughness={0.9} />
+    </mesh>
+  )
+}
+
+/** Hands the toolbar a function that downloads the current view as a PNG. */
+function CaptureBridge({ capture, filename }: { capture: RefObject<(() => void) | null>; filename: string }) {
+  const { gl, scene, camera } = useThree()
+  useEffect(() => {
+    capture.current = () => {
+      // Draw a fresh frame and read it in the same task, before the browser clears the buffer.
+      gl.render(scene, camera)
+      gl.domElement.toBlob((blob) => {
+        if (!blob) return
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
+      }, 'image/png')
+    }
+    return () => {
+      capture.current = null
+    }
+  }, [gl, scene, camera, capture, filename])
+  return null
 }
 
 function LoadingNote() {

@@ -6,6 +6,7 @@ import { errorText } from '../checkoutLogic'
 import { checkDimension, rangeText } from '../placeLogic'
 import type { Unit } from '../placeLogic'
 import type { RoomSummary } from '../types'
+import YourData from './YourData'
 
 export default function Home() {
   const [rooms, setRooms] = useState<RoomSummary[] | null>(null)
@@ -47,6 +48,9 @@ export default function Home() {
           </ul>
         )}
         <NewPlace />
+        <p className="home-links">
+          <YourData />
+        </p>
       </main>
     </div>
   )

@@ -13,7 +13,7 @@ import anthropic
 from anthropic import beta_tool
 from anthropic.lib.tools import ToolError
 
-from .checkout import eligible_items, mandate_violations
+from .checkout import currency_totals, eligible_items, mandate_violations
 
 MODEL = "claude-opus-5-5"
 MAX_TURNS = 8
@@ -142,9 +142,9 @@ def run_checkout(client, room_id, instruction, load, save, update=None):
 
     @beta_tool(input_schema=NO_ARGS, strict=True)
     def get_mandate() -> str:
-        """Read the user's spend mandate: item cap, total cap, allowed shops, expiry date."""
+        """Read the user's spend mandate: item cap, total cap, their currency, allowed shops, expiry date."""
         mandate = load()["mandate"]
-        keys = ("max_item_price", "max_total", "shops", "expires")
+        keys = ("max_item_price", "max_total", "currency", "shops", "expires")
         return json.dumps({k: mandate.get(k) for k in keys} if mandate else None)
 
     @beta_tool(input_schema=CHECK_SCHEMA, strict=True)
@@ -172,6 +172,7 @@ def run_checkout(client, room_id, instruction, load, save, update=None):
             "items": items,
             "total": round(sum(i["price"] for i in items), 2),
             "currency": items[0]["currency"],
+            "totals": currency_totals(items),
             "violations": mandate_violations(items, state["mandate"], date.today()),
             "created_at": datetime.now(timezone.utc).isoformat(),
             "created_by": "agent",

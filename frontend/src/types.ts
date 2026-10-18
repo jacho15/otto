@@ -36,6 +36,17 @@ export interface RoomShape {
   point_cloud?: string // .ply path relative to the room folder, from a scan
 }
 
+export interface Money {
+  amount: number
+  currency: string
+}
+
+/** A total across currencies: `amount` is null and `currency` is "MIXED" when there are several. */
+export interface Total {
+  amount: number | null
+  currency: string
+}
+
 export interface Door {
   width: number // metres
   height: number
@@ -47,7 +58,8 @@ export interface Room {
   room: RoomShape
   objects: RoomObject[]
   warnings: Warning[]
-  total: { amount: number; currency: string }
+  total: Total
+  totals: Money[]
   can_undo: boolean
   door: Door
 }
@@ -57,7 +69,8 @@ export interface Layout {
   name: string
   saved_at: string
   count: number
-  total: { amount: number; currency: string }
+  total: Total
+  totals: Money[]
 }
 
 export interface AddResult extends Room {
@@ -90,6 +103,7 @@ export interface MandateInput {
   max_total: number | null
   shops: string[]
   expires: string | null // YYYY-MM-DD
+  currency?: string // the limits are in this currency; USD when missing
 }
 
 export interface Mandate extends MandateInput {
@@ -122,8 +136,9 @@ export interface Order {
   room_id: string
   status: 'proposed' | 'approved' | 'cancelled'
   items: OrderItem[]
-  total: number
-  currency: string
+  total: number | null // null when the items are in several currencies
+  currency: string // "MIXED" then
+  totals: Money[]
   violations: string[]
   created_at: string
   created_by: 'agent'
@@ -258,4 +273,16 @@ export interface NewCustomItem {
   photo?: string
   model?: string
   image_url?: string
+}
+
+export interface DataItem {
+  kind: string
+  label: string
+  count: number
+  detail: string
+}
+
+export interface DataSummary {
+  items: DataItem[]
+  note: string
 }

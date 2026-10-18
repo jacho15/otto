@@ -1,9 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { deleteLayout, formatPrice, listLayouts } from '../api'
+import { deleteLayout, listLayouts } from '../api'
 import { errorText } from '../checkoutLogic'
 import { cheapestId } from '../layoutsLogic'
 import type { Layout } from '../types'
+import { totalLines } from '../moneyLogic'
 import { itemCount } from './Home'
+import MoneyLines from './MoneyLines'
 
 interface Props {
   roomId: string
@@ -86,7 +88,7 @@ export default function Layouts({ roomId, busy, onSave, onLoad }: Props) {
                   <strong>{l.name}</strong>
                   {l.id === cheapest && <span className="badge-ok">Cheapest</span>}
                 </span>
-                <span className="item-price">{formatPrice(l.total.amount, l.total.currency)}</span>
+                <MoneyLines className="item-price" lines={totalLines(l.totals, l.total)} />
               </div>
               <div className="layout-head">
                 <span className="muted">{itemCount(l.count)}</span>

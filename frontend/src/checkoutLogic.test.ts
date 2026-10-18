@@ -46,6 +46,22 @@ describe('mandateSummary', () => {
   })
 })
 
+describe('mandateSummary currency', () => {
+  it('formats the limits in the mandate currency', () => {
+    const m = {
+      max_item_price: 300,
+      max_total: 1000,
+      shops: ['shop.se'],
+      expires: null,
+      currency: 'EUR',
+      token_last4: '1234',
+      token_id: 't',
+      created_at: '',
+    }
+    expect(mandateSummary(m).slice(0, 2)).toEqual(['Up to €300.00 per item', 'Up to €1,000.00 per order'])
+  })
+})
+
 describe('orderedNames', () => {
   const order = (status: Order['status'], names: string[]) =>
     ({ status, items: names.map((object_name) => ({ object_name })) }) as Order
@@ -107,6 +123,28 @@ describe('currentViolations', () => {
     for (const url of ['https://ikea.com.evil.com/a', 'https://evil.com\@ikea.com/a', 'javascript:alert(1)', '']) {
       expect(currentViolations([item('A', 1, url)], shops, today)).toEqual(['A is not from an allowed shop.'])
     }
+  })
+  it('flags items in another currency and counts only the mandate currency in the caps', () => {
+    const eur = (title: string, price: number): OrderItem => ({ ...item(title, price), currency: 'EUR' })
+    expect(currentViolations([eur('Lamp', 1e6)], mandate(), today)).toEqual(['Lamp: Price is in EUR; your limits are in USD.'])
+    expect(currentViolations([item('Sofa', 100), eur('Lamp', 500), item('Chair', 50)], mandate({ max_total: 150 }), today)).toEqual([
+      'Lamp: Price is in EUR; your limits are in USD.',
+    ])
+    expect(currentViolations([item('Sofa', 100), eur('Lamp', 500), item('Chair', 50.01)], mandate({ max_total: 150 }), today)).toEqual([
+      'Lamp: Price is in EUR; your limits are in USD.',
+      'The total $150.01 is over the limit of $150.00.',
+    ])
+  })
+  it('formats with the mandate currency and treats a missing currency as USD', () => {
+    const m = mandate({ currency: 'EUR', max_item_price: 100, max_total: 150 })
+    const eur = (title: string, price: number): OrderItem => ({ ...item(title, price), currency: 'EUR' })
+    expect(currentViolations([eur('Lamp', 100.01)], m, today)).toEqual([
+      'Lamp costs €100.01, over the per-item limit of €100.00.',
+    ])
+    expect(currentViolations([item('Sofa', 10)], m, today)).toEqual(['Sofa: Price is in USD; your limits are in EUR.'])
+    const bare = { ...item('Sofa', 10), currency: undefined } as unknown as OrderItem
+    expect(currentViolations([bare], mandate(), today)).toEqual([])
+    expect(currentViolations([bare], m, today)).toEqual(['Sofa: Price is in USD; your limits are in EUR.'])
   })
   it('flags an expired mandate', () => {
     expect(currentViolations(items, mandate({ expires: '2026-01-27' }), today)).toEqual(['The mandate expired on 2026-01-27.'])

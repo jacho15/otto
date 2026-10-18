@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import { agentCheckout, approveOrder, cancelOrder, deleteMandate, formatPrice, getMandate, putMandate } from '../api'
-import { currentViolations, defaultExpiry, errorText, mandateSummary, parseLimit, parseShops, tokenLabel, violationsOf } from '../checkoutLogic'
+import { CURRENCIES, currentViolations, defaultExpiry, errorText, mandateSummary, parseLimit, parseShops, tokenLabel, violationsOf } from '../checkoutLogic'
+import { totalLines } from '../moneyLogic'
 import type { Mandate, Order } from '../types'
+import MoneyLines from './MoneyLines'
 
 interface Props {
   roomId: string
@@ -64,6 +66,7 @@ function MandateCard({ mandate, onChange }: { mandate: Mandate | null; onChange:
   const [editing, setEditing] = useState(false)
   const [maxItem, setMaxItem] = useState('')
   const [maxTotal, setMaxTotal] = useState('')
+  const [currency, setCurrency] = useState('USD')
   const [shops, setShops] = useState('ikea.com')
   const [expires, setExpires] = useState(defaultExpiry())
   const [busy, setBusy] = useState(false)
@@ -75,6 +78,7 @@ function MandateCard({ mandate, onChange }: { mandate: Mandate | null; onChange:
     if (mandate) {
       setMaxItem(mandate.max_item_price == null ? '' : String(mandate.max_item_price))
       setMaxTotal(mandate.max_total == null ? '' : String(mandate.max_total))
+      setCurrency(mandate.currency ?? 'USD')
       setShops(mandate.shops.join(', '))
       setExpires(mandate.expires ?? '')
     }
@@ -92,7 +96,7 @@ function MandateCard({ mandate, onChange }: { mandate: Mandate | null; onChange:
     setBusy(true)
     setError(null)
     try {
-      onChange(await putMandate({ max_item_price, max_total, shops: shopList, expires: expires || null }))
+      onChange(await putMandate({ max_item_price, max_total, shops: shopList, expires: expires || null, currency }))
       setEditing(false)
     } catch (err) {
       setError(errorText(err))
@@ -111,6 +115,7 @@ function MandateCard({ mandate, onChange }: { mandate: Mandate | null; onChange:
       setEditing(false)
       setMaxItem('')
       setMaxTotal('')
+      setCurrency('USD')
       setShops('ikea.com')
       setExpires(defaultExpiry())
     } catch (err) {
@@ -127,11 +132,19 @@ function MandateCard({ mandate, onChange }: { mandate: Mandate | null; onChange:
         <form className="checkout-form" onSubmit={save}>
           {mandate === null && <p className="muted">The agent can't buy anything until you set limits.</p>}
           <label>
-            Max price per item ($)
+            Currency
+            <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              {(CURRENCIES.includes(currency) ? CURRENCIES : [...CURRENCIES, currency]).map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Max price per item ({currency})
             <input type="number" min="0" step="any" placeholder="No limit" value={maxItem} onChange={(e) => setMaxItem(e.target.value)} />
           </label>
           <label>
-            Max order total ($)
+            Max order total ({currency})
             <input type="number" min="0" step="any" placeholder="No limit" value={maxTotal} onChange={(e) => setMaxTotal(e.target.value)} />
           </label>
           <label>
@@ -240,7 +253,8 @@ function ProposedCard({
     return () => window.removeEventListener('keydown', onKey)
   }, [confirming, busy])
 
-  const total = formatPrice(order.total, order.currency)
+  const lines = totalLines(order.totals, { amount: order.total, currency: order.currency })
+  const total = lines.join(' + ')
   const current = currentViolations(order.items, mandate)
   const serverViolations = rejected?.mandate === mandate ? rejected.list : null // stale once the limits change
 
@@ -294,7 +308,7 @@ function ProposedCard({
       </ul>
       <div className="total checkout-total">
         <span>Total</span>
-        <strong>{total}</strong>
+        <strong><MoneyLines lines={lines} /></strong>
       </div>
       {current.length > 0 && (
         <>
@@ -366,7 +380,7 @@ function History({ orders }: { orders: Order[] }) {
           <li key={o.id}>
             <span className="muted">{new Date(o.created_at).toLocaleDateString()}</span>
             <span className={`order-status ${o.status}`}>{o.status}</span>
-            <span className="item-price">{formatPrice(o.total, o.currency)}</span>
+            <MoneyLines className="item-price" lines={totalLines(o.totals, { amount: o.total, currency: o.currency })} />
           </li>
         ))}
       </ul>

@@ -6,6 +6,7 @@ import { dropIntent, type DropIntent } from '../furnitureLogic'
 import { findWarnings, warnedNames } from '../geometry'
 import RoomScene from '../scene/RoomScene'
 import { mergeServerObjects } from '../saveLogic'
+import { sumByCurrency, totalLines } from '../moneyLogic'
 import { acceptError, previewObject } from '../suggestLogic'
 import type { ChatReply, CustomItem, Layout, Order, Room, RoomObject, Suggestion, Vec2 } from '../types'
 import { useSaveQueue } from '../useSaveQueue'
@@ -17,9 +18,11 @@ import DesignPanel from './DesignPanel'
 import DoorSize from './DoorSize'
 import { ErrorCard, itemCount } from './Home'
 import Layouts from './Layouts'
+import MoneyLines from './MoneyLines'
 import RoomSize from './RoomSize'
 import Shop from './Shop'
 import Suggestions from './Suggestions'
+import YourData from './YourData'
 import YourItems from './YourItems'
 
 const STEP = (15 * Math.PI) / 180
@@ -43,6 +46,7 @@ export default function RoomPage() {
   const [designRunning, setDesignRunning] = useState(false) // the design agent saves on the server outside the save queue
   const [chatRunning, setChatRunning] = useState(false) // a chat request is running; undo would race with its changes
   const [serverVersion, setServerVersion] = useState(0) // bumped whenever a server response is applied
+  const [dataEpoch, setDataEpoch] = useState(0) // bumped when stored data is deleted, so panels that loaded it reload
   const draggingRef = useRef<string | null>(null)
   const dragDepth = useRef(0)
   const dropCount = useRef(0)
@@ -250,6 +254,21 @@ export default function RoomPage() {
     [id, exclusive],
   )
 
+  // After a delete in the Your data dialog, reload whatever the page holds of the deleted kind.
+  const onDataDeleted = useCallback(
+    (kind: string) => {
+      setDataEpoch((n) => n + 1)
+      if (kind === 'orders') listOrders(id).then(setOrders, () => {})
+      if (kind === 'custom') listCustomItems().then(setCustomItems, () => {})
+      if (kind === 'history' || kind === 'layouts' || kind === 'chats') {
+        exclusive(async () => {
+          await getRoom(id).then((r) => idRef.current === id && applyRoom(r), () => {})
+        })
+      }
+    },
+    [id, exclusive, applyRoom],
+  )
+
   const skipSuggestion = useCallback((s: Suggestion) => {
     setSuggestions((list) => list.filter((x) => x.catalog_id !== s.catalog_id))
   }, [])
@@ -346,7 +365,10 @@ export default function RoomPage() {
   const replaceTarget =
     selectedObj?.movable ? { name: selectedObj.name, title: selectedObj.product?.title ?? selectedObj.label } : null
   const ordered = useMemo(() => orderedNames(orders), [orders])
-  const totalAmount = visible.reduce((sum, o) => sum + (o.product?.price ?? 0), 0)
+  const totals = useMemo(
+    () => totalLines(sumByCurrency(visible.flatMap((o) => (o.product ? [o.product] : [])))),
+    [visible],
+  )
 
   if (error) {
     return (
@@ -437,10 +459,10 @@ export default function RoomPage() {
           />
         </div>
         <div hidden={tab !== 'chat'}>
-          <ChatPanel roomId={id} active={tab === 'chat'} onSend={chatSend} onRunning={setChatRunning} />
+          <ChatPanel key={dataEpoch} roomId={id} active={tab === 'chat'} onSend={chatSend} onRunning={setChatRunning} />
         </div>
         <div hidden={tab !== 'checkout'}>
-          <Checkout roomId={id} orders={orders} setOrders={setOrders} />
+          <Checkout key={dataEpoch} roomId={id} orders={orders} setOrders={setOrders} />
         </div>
         <div hidden={tab !== 'shop'}>
           <Suggestions
@@ -503,15 +525,23 @@ export default function RoomPage() {
           </ul>
           <div className="total">
             <span>Total</span>
-            <strong>{formatPrice(totalAmount, room.total.currency)}</strong>
+            <strong>
+              <MoneyLines lines={totals.length > 0 ? totals : totalLines([], { amount: 0, currency: singleCurrency(room.total.currency) })} />
+            </strong>
           </div>
-          <Layouts roomId={id} busy={adding} onSave={saveLayoutNow} onLoad={loadLayout} />
+          <Layouts key={dataEpoch} roomId={id} busy={adding} onSave={saveLayoutNow} onLoad={loadLayout} />
           <p className="help">Drag to move · Q / E rotate · Delete removes · Ctrl+Z undoes · Esc deselects</p>
           </>
         )}
+        <YourData onDeleted={onDataDeleted} />
       </aside>
     </div>
   )
+}
+
+/** An empty room has no priced pieces; its zero total shows in the room's own currency, or dollars when that is mixed. */
+function singleCurrency(currency: string) {
+  return currency === 'MIXED' ? 'USD' : currency
 }
 
 function replacedTitle(objects: RoomObject[], name: string) {

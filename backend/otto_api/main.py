@@ -17,11 +17,12 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 from .agent import AgentError, make_client, run_checkout
-from .checkout import MockVisaProvider, approval_violations
+from .checkout import MockVisaProvider, approval_violations, currency_totals, single_total
 from .fit import find_warnings
 from .alternatives import router as alternatives_router
 from .chat import router as chat_router
 from .custom import router as custom_router
+from .data import router as data_router
 from .extension_api import router as extension_router
 from .place import add_at, add_item
 from .places import router as places_router
@@ -37,6 +38,7 @@ app.include_router(alternatives_router)
 app.include_router(custom_router)
 app.include_router(extension_router)
 app.include_router(chat_router)
+app.include_router(data_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"^chrome-extension://[a-p]{32}$",
@@ -98,8 +100,14 @@ class ObjectAdd(BaseModel):
 class MandateBody(BaseModel):
     max_item_price: Money | None
     max_total: Money | None
+    currency: Annotated[str, StringConstraints(pattern=r"^[A-Za-z]{3}$")] = "USD"
     shops: Annotated[list[Shop], Field(max_length=10)]
     expires: Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$")] | None
+
+    @field_validator("currency")
+    @classmethod
+    def upper_currency(cls, value):
+        return value.upper()
 
     @field_validator("expires")
     @classmethod
@@ -203,11 +211,14 @@ def save_scene(room_id: str, scene: dict, patched: str | None = None) -> None:
         raise
 
 
-def total_of(objects: list) -> dict:
+def totals_of(objects: list) -> list:
+    """Sum of the visible priced objects, one entry per currency."""
     products = [o["product"] for o in objects if o.get("product") and not o.get("hidden")]
-    prices = [p["price"] for p in products if p.get("price") is not None]
-    currency = next((p["currency"] for p in products if p.get("currency")), "USD")
-    return {"amount": round(sum(prices), 2), "currency": currency}
+    return currency_totals([p for p in products if p.get("price") is not None])
+
+
+def total_of(objects: list) -> dict:
+    return single_total(totals_of(objects))
 
 
 def room_response(room_id: str, scene: dict) -> dict:
@@ -219,6 +230,7 @@ def room_response(room_id: str, scene: dict) -> dict:
         "objects": objects,
         "warnings": find_warnings(scene["room"], objects),
         "total": total_of(objects),
+        "totals": totals_of(objects),
         "door": scene.get("door") or DEFAULT_DOOR,
         "can_undo": bool(load_list(room_dir(room_id) / "history.json")),
     }
@@ -252,13 +264,17 @@ def load_mandate() -> dict | None:
         return json.load(f)
 
 
+def with_totals(order: dict) -> dict:
+    return {**order, "totals": currency_totals(order["items"])}
+
+
 def load_orders(room_id: str) -> list:
     base = room_dir(room_id) / "orders"
     orders = []
     if base.is_dir():
         for path in base.glob("*.json"):
             with open(path, encoding="utf-8") as f:
-                orders.append(json.load(f))
+                orders.append(with_totals(json.load(f)))
     return sorted(orders, key=lambda o: o["created_at"], reverse=True)
 
 
@@ -267,7 +283,7 @@ def load_order(room_id: str, order_id: str) -> dict:
     if not ROOM_ID.match(order_id) or not path.is_file():
         raise HTTPException(404, "Order not found")
     with open(path, encoding="utf-8") as f:
-        return json.load(f)
+        return with_totals(json.load(f))
 
 
 def save_order(room_id: str, order: dict) -> None:
@@ -343,6 +359,7 @@ def layouts_summary(layouts: list) -> list:
             "saved_at": l["saved_at"],
             "count": len([o for o in l["objects"] if not o.get("hidden")]),
             "total": total_of(l["objects"]),
+            "totals": totals_of(l["objects"]),
         }
         for l in layouts
     ]

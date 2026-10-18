@@ -5,9 +5,11 @@ import pytest
 from otto_api.checkout import (
     MockVisaProvider,
     approval_violations,
+    currency_totals,
     eligible_items,
     mandate_violations,
     shop_host,
+    single_total,
 )
 
 TODAY = date(2026, 6, 15)
@@ -118,6 +120,16 @@ def test_approval_violations_re_checks_items():
     assert approval_violations(order, objects, [order], mandate(), TODAY)
 
 
+def test_approval_violations_flags_a_changed_currency():
+    objects = [{"name": "a", "product": {"title": "A", "url": "https://x.com/a", "price": 10.0, "currency": "EUR"}}]
+    order = {"status": "proposed", "items": [{**item(10.0, "https://x.com/a", "A"), "object_name": "a"}]}
+    assert approval_violations(order, objects, [order], mandate(), TODAY) == [
+        "The currency of A changed since the order was proposed."
+    ]
+    objects[0]["product"].pop("currency")
+    assert approval_violations(order, objects, [order], mandate(), TODAY) == []
+
+
 def test_mock_provider_is_a_demo():
     order = {"total": 12.5, "currency": "USD"}
     payment = MockVisaProvider().authorize(order, {"token_last4": "0042"})
@@ -126,3 +138,45 @@ def test_mock_provider_is_a_demo():
     assert payment["amount"] == 12.5 and payment["token_last4"] == "0042"
     assert "No real payment" in payment["note"]
     assert payment["auth_id"]
+
+
+def eur(price=10.0, title="Lamp"):
+    return {**item(price, title=title), "currency": "EUR"}
+
+
+def test_other_currency_is_flagged_not_compared():
+    m = mandate(max_item_price=5, max_total=5)
+    problems = mandate_violations([eur(1000.0)], m, TODAY)
+    assert len(problems) == 1
+    assert "Price is in EUR; your limits are in USD." in problems[0]
+
+
+def test_total_cap_counts_only_mandate_currency():
+    m = mandate(max_total=150)
+    problems = mandate_violations([item(100.0), eur(500.0), item(50.0)], m, TODAY)
+    assert len(problems) == 1 and "EUR" in problems[0]
+    problems = mandate_violations([item(100.0), eur(500.0), item(50.01)], m, TODAY)
+    assert len(problems) == 2 and any("total" in p for p in problems)
+
+
+def test_caps_use_the_mandate_currency():
+    m = mandate(currency="EUR", max_item_price=100, max_total=150)
+    assert mandate_violations([eur(100.0), eur(50.0)], m, TODAY) == []
+    problems = mandate_violations([item(10.0)], m, TODAY)
+    assert problems == ["Chair: Price is in USD; your limits are in EUR."]
+    problems = mandate_violations([eur(100.01)], m, TODAY)
+    assert len(problems) == 1 and "100.01 EUR" in problems[0]
+
+
+def test_other_currency_without_caps_is_a_violation():
+    assert mandate_violations([eur(1e6)], mandate(), TODAY) == ["Lamp: Price is in EUR; your limits are in USD."]
+
+
+def test_currency_totals():
+    assert currency_totals([]) == []
+    assert currency_totals([item(10.5), eur(1.0), item(5.0), {**item(2.0), "currency": None}]) == [
+        {"currency": "EUR", "amount": 1.0}, {"currency": "USD", "amount": 17.5},
+    ]
+    assert single_total([]) == {"amount": 0.0, "currency": "USD"}
+    assert single_total([{"currency": "EUR", "amount": 1.0}]) == {"amount": 1.0, "currency": "EUR"}
+    assert single_total(currency_totals([item(), eur()])) == {"amount": None, "currency": "MIXED"}

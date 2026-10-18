@@ -257,3 +257,32 @@ def test_door_validation(client, body):
     assert client.patch(DOOR, json=body).status_code == 422
     assert client.get(ROOM_URL).json()["door"] == {"width": 0.81, "height": 2.03}
     assert client.patch("/api/rooms/nope/door", json={"width": 0.9, "height": 2.0}).status_code == 404
+
+
+def set_currency(data_dir, name, currency):
+    path = data_dir / "rooms" / ROOM / "scene.json"
+    scene = json.loads(path.read_text("utf-8"))
+    next(o for o in scene["objects"] if o["name"] == name)["product"]["currency"] = currency
+    path.write_text(json.dumps(scene), "utf-8")
+
+
+def test_totals_per_currency(client, data_dir):
+    room = client.get(ROOM_URL).json()
+    assert room["totals"] == [{"currency": "USD", "amount": 499.5}]
+    set_currency(data_dir, "chair", "EUR")
+    room = client.get(ROOM_URL).json()
+    assert room["totals"] == [{"currency": "EUR", "amount": 50.5}, {"currency": "USD", "amount": 449.0}]
+    assert room["total"] == {"amount": None, "currency": "MIXED"}
+    (entry,) = client.post(LAYOUTS, json={"name": "mixed"}).json()
+    assert entry["totals"] == room["totals"] and entry["total"] == room["total"]
+
+
+def test_totals_skip_hidden_and_unpriced(client, data_dir):
+    set_currency(data_dir, "chair", "EUR")
+    path = data_dir / "rooms" / ROOM / "scene.json"
+    scene = json.loads(path.read_text("utf-8"))
+    scene["objects"][1]["hidden"] = True
+    path.write_text(json.dumps(scene), "utf-8")
+    room = client.get(ROOM_URL).json()
+    assert room["totals"] == [{"currency": "USD", "amount": 449.0}]
+    assert room["total"] == {"amount": 449.0, "currency": "USD"}

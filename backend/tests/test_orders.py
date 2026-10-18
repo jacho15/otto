@@ -138,3 +138,29 @@ def test_cannot_cancel_approved(client, data_dir):
     approve(client)
     assert client.post(f"{ORDERS}/o1/cancel").status_code == 409
     assert client.get(ORDERS).json()[0]["status"] == "approved"
+
+
+def test_order_totals_per_currency(client, data_dir):
+    order = write_order(data_dir, names=("sofa", "chair"))
+    path = data_dir / "rooms" / ROOM / "orders" / "o1.json"
+    order["items"][1]["currency"] = "EUR"
+    path.write_text(json.dumps(order), "utf-8")
+    (listed,) = client.get(ORDERS).json()
+    assert listed["totals"] == [{"currency": "EUR", "amount": 50.5}, {"currency": "USD", "amount": 449.0}]
+
+
+def test_order_totals_single_currency(client, data_dir):
+    write_order(data_dir, names=("sofa", "chair"))
+    (listed,) = client.get(ORDERS).json()
+    assert listed["totals"] == [{"currency": "USD", "amount": 499.5}]
+    assert listed["total"] == 499.5 and listed["currency"] == "USD"
+
+
+def test_approve_blocks_other_currency_items(client, data_dir):
+    client.put("/api/mandate", json={**MANDATE, "max_total": 1000})
+    order = write_order(data_dir, names=("sofa",))
+    order["items"][0]["currency"] = "EUR"
+    (data_dir / "rooms" / ROOM / "orders" / "o1.json").write_text(json.dumps(order), "utf-8")
+    r = approve(client)
+    assert r.status_code == 409
+    assert any("Price is in EUR; your limits are in USD." in v for v in r.json()["detail"]["violations"])
