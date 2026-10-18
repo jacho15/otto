@@ -51,6 +51,7 @@ class CustomItemBody(BaseModel):
     photo: str | None = None
     model: str | None = None
     image_url: str | None = None
+    rgba: Annotated[list[Annotated[float, Field(allow_inf_nan=False, ge=0, le=1)]], Field(min_length=4, max_length=4)] | None = None  # stand-in colour
 
     @field_validator("url", "image_url")
     @classmethod
@@ -174,7 +175,7 @@ def add_custom_item(body: CustomItemBody):
         "currency": body.currency.upper(),
         "size": body.size,
         "label": body.label,
-        "rgba": [0.7, 0.7, 0.7, 1],
+        "rgba": body.rgba or [0.7, 0.7, 0.7, 1],
         "model": body.model,
         "photo": photo,
         "custom": True,

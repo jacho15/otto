@@ -4,16 +4,21 @@
 // Send a photo  -> otto puts the closest piece in your room and sends its photo, a picture and a short
 //                   walk-around video of your room with it, and the other options with their photos.
 // Reply 2 or 3  -> swaps in that option instead. "keep" keeps it; "undo" takes it out.
+// "black leather" -> looks again at the last photo, steered by what you said. Words sent with a photo steer it too.
 // "rooms" / "room 2" -> choose which room to try things in. Anything else is chat, and gets a short nudge.
 
 export interface Match {
   id: string
   title: string
+  label: string
+  source: 'catalog' | 'ikea' // ikea: found live on IKEA, not in otto's catalog yet
   url: string // where to buy it
-  price: number
+  price: number | null // null when the shop page didn't show one
   currency: string
   size: [number, number, number]
-  photo_url: string | null // the product photo, on otto's API
+  photo_url: string | null // the product photo, on otto's API (catalog pieces)
+  image_url?: string | null // the product photo on IKEA (live finds)
+  rgba?: number[] | null // the colour to draw it in when it has no 3D model
   why: string
   fits?: boolean
   problems?: string[]
@@ -32,8 +37,9 @@ export interface RoomSummary {
 
 /** The parts of otto's API a conversation uses. */
 export interface Otto {
-  matchPhoto(photo: Buffer, mimeType: string, roomId: string): Promise<MatchResult>
-  addPiece(roomId: string, catalogId: string): Promise<string> // the new piece's name
+  /** Catalog and live IKEA matches for a photo. `note` is what the person said about it. */
+  matchPhoto(photo: Buffer, mimeType: string, roomId: string, note?: string): Promise<MatchResult>
+  addPiece(roomId: string, match: Match): Promise<string> // the new piece's name
   removePiece(roomId: string, name: string): Promise<void>
   renderRoom(roomId: string, select: string): Promise<Buffer> // PNG
   renderTour(roomId: string, focus: string): Promise<Buffer> // MP4: a few seconds walking around the piece
@@ -57,11 +63,14 @@ export interface State {
   matches: Match[]
   placed: Placed | null
   greeted: boolean
+  lastPhoto: { bytes: Buffer; mimeType: string } | null // so "black leather" can look again
 }
 
-export type Incoming = { kind: 'text'; text: string } | { kind: 'photo'; read: () => Promise<Buffer>; mimeType: string }
+export type Incoming =
+  | { kind: 'text'; text: string }
+  | { kind: 'photo'; read: () => Promise<Buffer>; mimeType: string; note?: string } // note: words sent with it
 
-export const newState = (roomId: string): State => ({ roomId, matches: [], placed: null, greeted: false })
+export const newState = (roomId: string): State => ({ roomId, matches: [], placed: null, greeted: false, lastPhoto: null })
 
 // ---- understanding replies ----
 
@@ -71,6 +80,7 @@ export type Intent =
   | { kind: 'keep' }
   | { kind: 'rooms' }
   | { kind: 'room'; n: number }
+  | { kind: 'refine' } // a colour, material or style to look for instead
   | { kind: 'chat' }
 
 const ORDINALS: Record<string, number> = { first: 1, second: 2, third: 3, one: 1, two: 2, three: 3 }
@@ -84,6 +94,13 @@ const clean = (text: string) =>
     .replace(/[^a-z0-9#' ]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+
+// words that describe what to look for: "black leather", "in walnut", "something velvet"
+const LOOKS =
+  /\b(black|white|grey|gray|beige|brown|red|blue|green|yellow|pink|navy|cream|tan|leather|faux|wood|wooden|oak|walnut|pine|metal|chrome|steel|brass|fabric|velvet|linen|boucle|rattan|wicker|glass|marble|plastic|modern|vintage|mid ?century|scandinavian|minimal(ist)?|industrial|rustic|cheaper|bigger|smaller)\b/
+
+/** True when a text says what to look for, not just chat. */
+export const describesLooks = (raw: string) => LOOKS.test(clean(raw))
 
 /** What a reply asks for, allowing filler words ("yeah 2 pls", "nah take it out", "these look fire"). */
 export function intentOf(raw: string, matchCount: number): Intent {
@@ -107,6 +124,7 @@ export function intentOf(raw: string, matchCount: number): Intent {
       .sort((a, b) => a.at - b.at)
     if (named.length && digits.length === 0 && named[0].v <= matchCount) return { kind: 'choice', n: named[0].v }
   }
+  if (describesLooks(t)) return { kind: 'refine' }
   return { kind: 'chat' }
 }
 
@@ -115,8 +133,16 @@ export function intentOf(raw: string, matchCount: number): Intent {
  * A photo wins and its text is just a comment; otherwise the last text that asks for something, else the last text.
  */
 export function combine(batch: Incoming[], matchCount: number): Incoming | null {
-  const photo = batch.find((m) => m.kind === 'photo')
-  if (photo) return photo
+  const photo = batch.find((m): m is Extract<Incoming, { kind: 'photo' }> => m.kind === 'photo')
+  if (photo) {
+    // what they wrote with it steers the search: "black leather ones", "this but in oak"
+    const note = batch
+      .filter((m): m is Extract<Incoming, { kind: 'text' }> => m.kind === 'text')
+      .map((m) => m.text.trim())
+      .filter(Boolean)
+      .join(' ')
+    return note ? { ...photo, note } : photo
+  }
   const texts = batch.filter((m): m is Extract<Incoming, { kind: 'text' }> => m.kind === 'text')
   const asking = [...texts].reverse().find((m) => intentOf(m.text, matchCount).kind !== 'chat')
   return asking ?? texts.at(-1) ?? null
@@ -127,6 +153,9 @@ export function combine(batch: Incoming[], matchCount: number): Incoming | null 
 export function money(amount: number, currency: string): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount)
 }
+
+/** "$199.00", or a pointer to the shop when the price is unknown. */
+export const priceOf = (m: Match) => (m.price == null ? 'price on IKEA' : money(m.price, m.currency))
 
 /** A file's type from its first bytes. */
 export function mediaType(buf: Buffer): string {
@@ -139,7 +168,7 @@ const cm = (size: [number, number, number]) => size.map((v) => Math.round(v * 10
 
 export function matchLine(m: Match, n: number): string {
   const fit = m.fits === undefined ? '' : m.fits ? '' : ` · won't fit: ${(m.problems ?? [])[0]?.toLowerCase() ?? 'no space'}`
-  return `${n}. ${m.title}: ${money(m.price, m.currency)} · ${cm(m.size)}${fit}${m.url ? `\nBuy it: ${m.url}` : ''}`
+  return `${n}. ${m.title}: ${priceOf(m)} · ${cm(m.size)}${fit}${m.url ? `\nBuy it: ${m.url}` : ''}`
 }
 
 /** "Demo Living Room" -> "your living room". */
@@ -180,9 +209,10 @@ async function roomName(otto: Otto, roomId: string): Promise<string | undefined>
 
 /** The piece's product photo, or nothing if it can't be had. */
 async function productPhoto(otto: Otto, m: Match): Promise<Reply | null> {
-  if (!m.photo_url) return null
+  const url = m.photo_url ?? m.image_url
+  if (!url) return null
   try {
-    const bytes = await otto.fetchFile(m.photo_url)
+    const bytes = await otto.fetchFile(url)
     const mimeType = mediaType(bytes)
     return { media: bytes, mimeType, name: `${m.id}.${mimeType.split('/')[1]}` }
   } catch {
@@ -193,7 +223,7 @@ async function productPhoto(otto: Otto, m: Match): Promise<Reply | null> {
 /** Put a match in the room (replacing the last trial piece), then picture and film it, both at once. */
 async function tryPiece(otto: Otto, state: State, m: Match): Promise<{ placed: Placed; picture: Reply | null; tour: Reply | null }> {
   if (state.placed && !state.placed.kept) await otto.removePiece(state.placed.roomId, state.placed.name)
-  const name = await otto.addPiece(state.roomId, m.id)
+  const name = await otto.addPiece(state.roomId, m)
   // either can fail on its own; the piece is in the room regardless and the text says so
   const [picture, tour] = await Promise.all([
     otto.renderRoom(state.roomId, name).then((b): Reply => ({ media: b, mimeType: 'image/png', name: 'your-room.png' }), () => null),
@@ -204,7 +234,9 @@ async function tryPiece(otto: Otto, state: State, m: Match): Promise<{ placed: P
 
 async function onPhoto(otto: Otto, state: State, msg: Extract<Incoming, { kind: 'photo' }>): Promise<Turn> {
   if (!msg.mimeType.startsWith('image/')) return { state, replies: [{ text: "Send a photo (JPEG, PNG or WebP) and I'll look for it." }] }
-  const result = await otto.matchPhoto(await msg.read(), msg.mimeType, state.roomId)
+  const bytes = await msg.read()
+  state = { ...state, lastPhoto: { bytes, mimeType: msg.mimeType } }
+  const result = await otto.matchPhoto(bytes, msg.mimeType, state.roomId, msg.note)
   if (!result.matches.length) return { state: { ...state, matches: [], greeted: true }, replies: [{ text: result.message }] }
 
   const [best, ...others] = result.matches
@@ -218,7 +250,7 @@ async function onPhoto(otto: Otto, state: State, msg: Extract<Incoming, { kind: 
   const desc = result.features.description.replace(/^(a|an)\s+/i, '')
   const fit = best.fits === false ? ` Heads up: it ${(best.problems ?? ['may not fit'])[0].toLowerCase()}.` : ''
   const replies: Reply[] = [
-    { text: `That looks like ${article(desc)} ${desc}. The closest I have is the ${best.title}: ${money(best.price, best.currency)} · ${cm(best.size)}.${fit}${best.url ? `\nBuy it: ${best.url}` : ''}` },
+    { text: `That looks like ${article(desc)} ${desc}. The closest I have is the ${best.title}: ${priceOf(best)} · ${cm(best.size)}.${fit}${best.url ? `\nBuy it: ${best.url}` : ''}` },
   ]
   if (bestPhoto) replies.push(bestPhoto)
   if (picture || tour) replies.push({ text: `This is what it would look like in ${where}:` })
@@ -270,6 +302,14 @@ async function onText(otto: Otto, state: State, raw: string): Promise<Turn> {
     return { state: { ...state, roomId: room.id, matches: [], placed: null }, replies: [{ text: `Now trying things in ${room.name}. Send a photo.` }] }
   }
 
+  if (intent.kind === 'refine') {
+    if (!state.lastPhoto) {
+      return { state: { ...state, greeted: true }, replies: [{ text: `Send me a photo and I'll look for ${raw.trim().toLowerCase()} ones like it.` }] }
+    }
+    const { bytes, mimeType } = state.lastPhoto
+    return onPhoto(otto, state, { kind: 'photo', read: async () => bytes, mimeType, note: raw })
+  }
+
   if (intent.kind === 'choice') {
     const m = state.matches[intent.n - 1]
     if (state.placed?.matchId === m.id && state.placed.roomId === state.roomId) {
@@ -280,7 +320,7 @@ async function onText(otto: Otto, state: State, raw: string): Promise<Turn> {
     const fit = m.fits === false ? ` Heads up: it ${(m.problems ?? ['may not fit'])[0].toLowerCase()}.` : ''
     const shown = picture || tour
     const replies: Reply[] = [
-      { text: `${shown ? `Here's the ${m.title} (${money(m.price, m.currency)}) in ${where}.` : `I put the ${m.title} in ${where}, but couldn't draw the room just now.`}${fit}` },
+      { text: `${shown ? `Here's the ${m.title} (${priceOf(m)}) in ${where}.` : `I put the ${m.title} in ${where}, but couldn't draw the room just now.`}${fit}` },
     ]
     if (picture) replies.push(picture)
     if (tour) replies.push(tour)

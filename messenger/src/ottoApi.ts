@@ -18,15 +18,32 @@ export function ottoApi(base: string): Otto {
   const room = (id: string) => `/api/rooms/${encodeURIComponent(id)}`
 
   return {
-    async matchPhoto(photo, mimeType, roomId) {
+    async matchPhoto(photo, mimeType, roomId, note) {
       const form = new FormData()
       form.append('file', new Blob([new Uint8Array(photo)], { type: mimeType }), 'photo')
       form.append('room_id', roomId)
+      form.append('live', 'true') // search IKEA too, so it isn't limited to otto's own catalog
+      if (note) form.append('note', note.slice(0, 500))
       const res = await check(await fetch(url('/api/match-photo'), { method: 'POST', body: form }))
       return (await res.json()) as MatchResult
     },
 
-    async addPiece(roomId, catalogId) {
+    async addPiece(roomId, match) {
+      let catalogId = match.id
+      if (match.source === 'ikea') {
+        // a live IKEA find isn't in the catalog: save it as a custom item first, drawn in the photo's colour
+        const made = await check(
+          await fetch(url('/api/custom-items'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              title: match.title.slice(0, 120), url: match.url, price: match.price, currency: match.currency,
+              size: match.size, label: match.label, image_url: match.image_url ?? undefined, rgba: match.rgba ?? undefined,
+            }),
+          }),
+        )
+        catalogId = ((await made.json()) as { id: string }).id
+      }
       const res = await check(
         await fetch(url(`${room(roomId)}/objects`), {
           method: 'POST',
@@ -52,7 +69,8 @@ export function ottoApi(base: string): Otto {
     },
 
     async fetchFile(path) {
-      const res = await check(await fetch(url(path)))
+      // otto's own files by path; product photos on IKEA by full address
+      const res = await check(await fetch(/^https?:\/\//.test(path) ? path : url(path)))
       return Buffer.from(await res.arrayBuffer())
     },
 

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { combine, intentOf, matchLine, newState, respond, roomPhrase, type Match, type Otto, type Reply, type State } from './conversation'
+import { combine, describesLooks, intentOf, matchLine, newState, respond, roomPhrase, type Match, type Otto, type Reply, type State } from './conversation'
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0])
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])
 const MP4 = Buffer.from('mp4')
 
 const match = (id: string, title: string, price: number, extra: Partial<Match> = {}): Match => ({
-  id, title, url: `https://www.ikea.com/us/en/p/${id}/`, price, currency: 'USD', size: [0.63, 0.75, 0.68], photo_url: `/api/catalog/${id}/photo`,
+  id, title, label: 'chair', source: 'catalog', url: `https://www.ikea.com/us/en/p/${id}/`, price, currency: 'USD', size: [0.63, 0.75, 0.68], photo_url: `/api/catalog/${id}/photo`,
   why: 'Same type, similar colour and close in size', fits: true, problems: [], ...extra,
 })
 
@@ -16,13 +16,13 @@ function fakeOtto(overrides: Partial<Otto> = {}) {
   const calls: string[] = []
   let n = 0
   const otto: Otto = {
-    async matchPhoto(photo, mimeType, roomId) {
-      calls.push(`match ${mimeType} ${roomId}`)
+    async matchPhoto(photo, mimeType, roomId, note) {
+      calls.push(`match ${mimeType} ${roomId}${note ? ` note=${note}` : ''}`)
       return { features: { found: true, type: 'chair', description: 'grey plastic stacking chair with a black metal frame' }, matches: MATCHES, message: '' }
     },
-    async addPiece(roomId, catalogId) {
-      calls.push(`add ${roomId} ${catalogId}`)
-      return `${catalogId}_${++n}`
+    async addPiece(roomId, m) {
+      calls.push(`add ${roomId} ${m.id}`)
+      return `${m.id}_${++n}`
     },
     async removePiece(roomId, name) {
       calls.push(`remove ${roomId} ${name}`)
@@ -69,6 +69,17 @@ describe('intentOf: what a reply asks for, with filler words', () => {
     expect(intentOf('switch to room 2', 3)).toEqual({ kind: 'room', n: 2 })
   })
 
+  it.each([['black leather'], ['something in walnut please'], ['Show me velvet ones'], ['more modern?']])('"%s" asks to look again', (text) =>
+    expect(intentOf(text, 3).kind).toBe('refine'),
+  )
+
+  it('a number still wins over a colour: "2, the black one"', () => expect(intentOf('2 the black one', 3)).toEqual({ kind: 'choice', n: 2 }))
+
+  it('describesLooks', () => {
+    expect(describesLooks('black leather')).toBe(true)
+    expect(describesLooks('These chairs look fire.')).toBe(false)
+  })
+
   it.each([['These chairs look fire.'], ['i have 2 kids and a dog'], ['4'], ['lol']])('"%s" is just chat', (text) =>
     expect(intentOf(text, 3).kind).toBe('chat'),
   )
@@ -77,7 +88,10 @@ describe('intentOf: what a reply asks for, with filler words', () => {
 })
 
 describe('combine: messages sent together are one thought', () => {
-  it('a photo wins, and its text is just a comment', () => expect(combine([say('These chairs look fire.'), photo], 0)).toBe(photo))
+  it('a photo wins, and its words come along as a note', () => {
+    expect(combine([say('These chairs look fire.'), photo], 0)).toEqual({ ...photo, note: 'These chairs look fire.' })
+    expect(combine([photo], 0)).toBe(photo)
+  })
   it('the last text that asks for something wins over chat', () => {
     const pick = say('2')
     expect(combine([say('hmm'), pick, say('looks nice')], 3)).toBe(pick)
@@ -93,6 +107,9 @@ describe('wording', () => {
   it('lists an option with price and size, and why it will not fit', () => {
     expect(matchLine(MATCHES[1], 2)).toBe('2. PS LÖMSK Swivel armchair: $129.99 · 63 × 75 × 68 cm\nBuy it: https://www.ikea.com/us/en/p/lomsk/')
     expect(matchLine(match('x', 'Big', 10, { fits: false, problems: ['Taller than the ceiling'] }), 3)).toContain("won't fit: taller than the ceiling")
+  })
+  it('says "price on IKEA" when the price is unknown, never $0.00', () => {
+    expect(matchLine(match('x', 'LILLÅNÄS Chair', 0, { price: null }), 2)).toContain('LILLÅNÄS Chair: price on IKEA ·')
   })
   it('names the room the way a person would', () => {
     expect(roomPhrase('Demo Living Room')).toBe('your living room')
@@ -128,6 +145,37 @@ describe('a conversation', () => {
     const { otto } = fakeOtto({ fetchFile: async () => { throw new Error('404') }, renderTour: async () => { throw new Error('slow') } })
     const turn = await respond(otto, newState('demo-living-room'), photo)
     expect(kinds(turn.replies).filter((k) => k !== 'text')).toEqual(['image/png'])
+  })
+
+  it('passes the words sent with a photo on to the search', async () => {
+    const { otto, calls } = fakeOtto()
+    await respond(otto, newState('r'), { ...photo, note: 'black leather ones' })
+    expect(calls[0]).toBe('match image/jpeg r note=black leather ones')
+  })
+
+  it('looks again at the last photo when told a colour or material', async () => {
+    const { otto, calls } = fakeOtto()
+    const a = await respond(otto, newState('r'), photo)
+    const b = await respond(otto, a.state, say('black leather'))
+    expect(calls.filter((c) => c.startsWith('match'))).toEqual(['match image/jpeg r', 'match image/jpeg r note=black leather'])
+    expect(calls).toContain('remove r dyvlinge_1') // the first trial piece makes way
+    expect(texts(b.replies)[0]).toContain('The closest I have is')
+  })
+
+  it('asks for a photo when told a colour before any photo', async () => {
+    const { otto, calls } = fakeOtto()
+    const turn = await respond(otto, newState('r'), say('black leather'))
+    expect(texts(turn.replies)).toEqual(["Send me a photo and I'll look for black leather ones like it."])
+    expect(calls).toEqual([])
+  })
+
+  it('shows a live IKEA find with the photo from IKEA', async () => {
+    const live = match('ikea-1', 'LIDÅS Chair - black', 89, { source: 'ikea', photo_url: null, image_url: 'https://www.ikea.com/img/lidas.jpg' })
+    const { otto, calls } = fakeOtto({ matchPhoto: async () => ({ features: { found: true, type: 'chair', description: 'black chair' }, matches: [live], message: '' }) })
+    const turn = await respond(otto, newState('r'), photo)
+    expect(calls).toContain('file https://www.ikea.com/img/lidas.jpg')
+    expect(calls).toContain('add r ikea-1')
+    expect(kinds(turn.replies).slice(0, 2)).toEqual(['text', 'image/jpeg'])
   })
 
   it('swaps in another option, taking the trial piece out first', async () => {

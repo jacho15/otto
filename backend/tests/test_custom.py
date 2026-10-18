@@ -279,3 +279,13 @@ def test_design_agent_catalog_list_stays_catalog_only(design, client):
     api = FakeApi([[call("get_catalog")], [text("ok")]])
     design(api)
     assert item["id"] not in {c["id"] for c in json.loads(api.result_text(1))}
+
+
+
+def test_custom_item_takes_a_stand_in_colour(client):
+    body = {"title": "LIDÅS Chair", "size": [0.5, 0.55, 0.85], "label": "chair", "rgba": [0.1, 0.1, 0.1, 1]}
+    r = client.post("/api/custom-items", json=body)
+    assert r.status_code == 200, r.text
+    assert r.json()["rgba"] == [0.1, 0.1, 0.1, 1]
+    assert client.post("/api/custom-items", json={**body, "rgba": [2, 0, 0, 1]}).status_code == 422
+    assert client.post("/api/custom-items", json={k: v for k, v in body.items() if k != "rgba"}).json()["rgba"] == [0.7, 0.7, 0.7, 1]

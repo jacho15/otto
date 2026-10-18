@@ -31,7 +31,7 @@ CATALOG = [
 
 WHITE_ARMCHAIR = {
     "found": True, "type": "armchair", "description": "white leather armchair", "colour_hex": "#ebe8e0",
-    "colours": ["white"], "materials": ["leather"], "style": ["modern"],
+    "colours": ["white"], "materials": ["leather"], "style": ["modern"], "search_query": "white leather armchair",
     "size_cm": {"width": 80, "depth": 85, "height": None},
 }
 
@@ -81,13 +81,43 @@ def test_rank_puts_the_lookalike_first_and_drops_other_types():
     assert "black-armchair" in ids
     assert "desk" not in ids and "lamp" not in ids
     assert len(ranked) == 3
-    assert ranked[0]["why"] == "Same type, similar colour and close in size"
+    assert ranked[0]["why"] == "Same type, white and close in size"  # names the colour and material words it matched
 
 
 def test_rank_falls_back_to_related_types():
     ranked = rank({**WHITE_ARMCHAIR, "type": "armchair"}, [c for c in CATALOG if c["label"] != "armchair"])
     assert {m["item"]["id"] for m in ranked} == {"swivel-chair", "loveseat"}  # chair and sofa stand in for an armchair
     assert all(m["why"].startswith("A close type") for m in ranked)
+
+
+BLACK_LEATHER_CHAIR = {
+    "found": True, "type": "chair", "description": "black leather dining chair with metal legs", "colour_hex": "#1a1a1a",
+    "colours": ["black"], "materials": ["leather", "metal"], "style": ["modern"], "search_query": "black leather dining chair",
+    "size_cm": {"width": None, "depth": None, "height": None},
+}
+
+
+def live_item(item_id, title, size=(0.5, 0.55, 0.85), price=99.0):
+    return {**item(item_id, "chair", size, price), "title": title, "source": "ikea", "rgba": None,
+            "image_url": f"https://www.ikea.com/us/en/images/products/{item_id}.jpg", "model": None, "photo": None}
+
+
+def test_rank_prefers_titles_with_the_colour_and_material_it_saw():
+    grey = live_item("grey", "ODGER Chair - anthracite")
+    black = live_item("black", "LIDÅS Chair - black leather")
+    ranked = rank(BLACK_LEATHER_CHAIR, [grey, black])
+    assert [m["item"]["id"] for m in ranked] == ["black", "grey"]
+    assert ranked[0]["why"].startswith("Same type, black leather")
+
+
+def test_wanted_words_skips_filler():
+    assert photo_match.wanted_words({"colours": ["dark brown", "black"], "materials": ["faux leather"]}) == ["brown", "black", "faux", "leather"]
+
+
+def test_search_size_uses_the_estimate_or_a_typical_size():
+    assert photo_match.search_size(BLACK_LEATHER_CHAIR) == [0.5, 0.55, 0.85]
+    est = {**BLACK_LEATHER_CHAIR, "size_cm": {"width": 46, "depth": None, "height": 80}}
+    assert photo_match.search_size(est) == [0.46, 0.55, 0.8]
 
 
 def test_rank_nothing_for_an_unknown_type():
@@ -117,6 +147,47 @@ def test_match_photo_every_piece_gets_a_photo_url(post):
     r = post(FakeApi([features_turn(WHITE_ARMCHAIR)]))
     by_id = {m["id"]: m for m in r.json()["matches"]}
     assert by_id["no-photo-chair"]["photo_url"] == "/api/catalog/no-photo-chair/photo"
+
+
+def test_match_photo_live_adds_ikea_finds_ranked_with_the_catalog(post, monkeypatch):
+    found = [live_item("lidas", "LIDÅS Chair - black leather")]
+    seen = []
+    monkeypatch.setattr(photo_match, "ikea_finds", lambda client, features: seen.append(features["search_query"]) or found)
+    r = post(FakeApi([features_turn(BLACK_LEATHER_CHAIR)]), live="true")
+    assert r.status_code == 200, r.text
+    first = r.json()["matches"][0]
+    assert first["id"] == "lidas" and first["source"] == "ikea"
+    assert first["photo_url"] is None and first["image_url"].startswith("https://www.ikea.com/")
+    assert seen == ["black leather dining chair"]
+
+
+def test_match_photo_without_live_does_not_search_ikea(post, monkeypatch):
+    monkeypatch.setattr(photo_match, "ikea_finds", lambda client, features: pytest.fail("searched IKEA"))
+    assert post(FakeApi([features_turn(WHITE_ARMCHAIR)])).status_code == 200
+
+
+def test_match_photo_live_falls_back_to_the_catalog_when_ikea_fails(post, monkeypatch):
+    def down(client, features):
+        raise photo_match.AgentError("IKEA search is unavailable right now.")
+
+    monkeypatch.setattr(photo_match, "ikea_finds", down)
+    r = post(FakeApi([features_turn(WHITE_ARMCHAIR)]), live="true")
+    assert r.status_code == 200 and r.json()["matches"][0]["id"] == "white-armchair"
+
+
+def test_ikea_finds_searches_with_the_photo_and_colours_the_stand_in(monkeypatch):
+    prompts = []
+
+    def find(client, prompt, system):
+        prompts.append((prompt, system))
+        return [{"url": "https://www.ikea.com/us/en/p/lidas-chair-s123456/", "why": "black leather"}]
+
+    monkeypatch.setattr(photo_match.ikea, "find_products", find)
+    monkeypatch.setattr(photo_match.ikea, "shortlist", lambda products, wanted: [live_item("lidas", "LIDÅS Chair - black")])
+    items = photo_match.ikea_finds(object(), BLACK_LEATHER_CHAIR)
+    assert items[0]["rgba"] == [0.102, 0.102, 0.102, 1.0]  # the photo's black, for the stand-in shape
+    prompt, system = prompts[0]
+    assert "black leather dining chair" in prompt and system is photo_match.IKEA_SYSTEM
 
 
 def test_match_photo_fit_checks_against_a_room(post):
@@ -226,3 +297,23 @@ def test_catalog_photo_only_from_ikea_and_404_otherwise(client, shop, monkeypatc
 def test_catalog_photo_refuses_a_non_image(client, shop, monkeypatch):
     monkeypatch.setattr(photo_match, "product_photo_from_page", lambda url: b"<html>not an image</html>")
     assert client.get("/api/catalog/no-photo-chair/photo").status_code == 404
+
+
+
+def test_title_colour_score_marks_clashing_colours_down():
+    s = photo_match.title_colour_score
+    assert s(["black"], "LIDÅS Chair - black") == 1.0
+    assert s(["grey", "black"], "LÄKTARE Conference chair - medium gray/black") == 1.0  # gray counts as grey
+    assert s(["grey", "black"], "SKÅLSTA Chair - plastic red/tubular metal/black-gray") == 0.55  # red clashes
+    assert s(["black"], "ODGER Chair - white") == 0.2
+    assert s(["black"], "ADDE Chair") == 0.5  # no colour named
+
+
+def test_note_steers_the_reading(post):
+    api = FakeApi([features_turn(WHITE_ARMCHAIR)])
+    post(api, note="black leather ones please")
+    prompt = api.body(0)["messages"][0]["content"][1]["text"]
+    assert '"black leather ones please"' in prompt and "wins over the photo" in prompt
+    plain = FakeApi([features_turn(WHITE_ARMCHAIR)])
+    post(plain)
+    assert "person said" not in plain.body(0)["messages"][0]["content"][1]["text"]

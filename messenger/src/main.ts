@@ -31,9 +31,12 @@ const pending = new Map<string, { batch: Incoming[]; timer: NodeJS.Timeout }>()
 
 async function handle(key: string, outbox: Outbox, msg: Incoming) {
   const state = states.get(key) ?? newState(ROOM)
-  const slow = msg.kind === 'photo' || intentOf(msg.text, state.matches.length).kind === 'choice'
+  const intent = msg.kind === 'text' ? intentOf(msg.text, state.matches.length).kind : 'photo'
+  const refine = intent === 'refine' && state.lastPhoto !== null
+  const slow = msg.kind === 'photo' || intent === 'choice' || refine
   // The slow steps get one heads-up and typing dots, so the chat doesn't look stuck.
-  if (msg.kind === 'photo') await outbox.text('Love it. Finding the closest match and putting it in your room. Give me about half a minute…')
+  if (msg.kind === 'photo') await outbox.text('Love it. Looking through the shop and IKEA for the closest match, then putting it in your room. About a minute…')
+  else if (refine) await outbox.text(`On it, looking for ${msg.text.trim().toLowerCase().replace(/[.!?]+$/, '')} instead…`)
   else if (slow) await outbox.text('Swapping it in, one moment…')
   if (slow) await outbox.typing(true)
   try {
