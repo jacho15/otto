@@ -11,3 +11,4 @@ data/saved.json
 data/rooms/*/orders/
 data/rooms/*
 !data/rooms/demo-living-room/
+!data/rooms/scanned-lounge/

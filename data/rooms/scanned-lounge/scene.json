@@ -1,0 +1,181 @@
+{
+  "room": {
+    "size_xy": [
+      10.53,
+      5.63
+    ],
+    "ceiling_height": 2.4,
+    "wall_thickness": 0.1,
+    "point_cloud": "room.ply"
+  },
+  "objects": [
+    {
+      "name": "armchair_31",
+      "label": "armchair",
+      "source": "scan",
+      "mesh": "meshes/armchair_31.glb",
+      "pos": [
+        0.252,
+        -0.573,
+        0.0
+      ],
+      "yaw": 1.6427,
+      "size": [
+        0.939,
+        0.895,
+        0.812
+      ],
+      "movable": true,
+      "rgba": [
+        0.2,
+        0.467,
+        0.533,
+        1.0
+      ]
+    },
+    {
+      "name": "chair_2",
+      "label": "chair",
+      "source": "scan",
+      "mesh": "meshes/chair_2.glb",
+      "pos": [
+        3.175,
+        0.163,
+        0.0
+      ],
+      "yaw": -1.5649,
+      "size": [
+        1.006,
+        0.77,
+        0.809
+      ],
+      "movable": true,
+      "rgba": [
+        0.71,
+        0.682,
+        0.643,
+        1.0
+      ]
+    },
+    {
+      "name": "chair_3",
+      "label": "chair",
+      "source": "scan",
+      "mesh": "meshes/chair_3.glb",
+      "pos": [
+        3.024,
+        1.265,
+        0.0
+      ],
+      "yaw": -2.8624,
+      "size": [
+        0.934,
+        0.922,
+        0.815
+      ],
+      "movable": true,
+      "rgba": [
+        0.765,
+        0.753,
+        0.718,
+        1.0
+      ]
+    },
+    {
+      "name": "coffee_table_24",
+      "label": "coffee table",
+      "source": "scan",
+      "mesh": "meshes/coffee_table_24.glb",
+      "pos": [
+        1.272,
+        0.147,
+        0.0
+      ],
+      "yaw": -1.2274,
+      "size": [
+        0.926,
+        0.937,
+        0.229
+      ],
+      "movable": true,
+      "rgba": [
+        0.922,
+        0.898,
+        0.851,
+        1.0
+      ]
+    },
+    {
+      "name": "lamp_20",
+      "label": "lamp",
+      "source": "scan",
+      "mesh": "meshes/lamp_20.glb",
+      "pos": [
+        2.264,
+        2.054,
+        0.0
+      ],
+      "yaw": 1.308,
+      "size": [
+        0.325,
+        0.305,
+        0.763
+      ],
+      "movable": true,
+      "rgba": [
+        0.816,
+        0.773,
+        0.737,
+        1.0
+      ]
+    },
+    {
+      "name": "sofa_8",
+      "label": "sofa",
+      "source": "scan",
+      "mesh": "meshes/sofa_8.glb",
+      "pos": [
+        2.067,
+        -0.925,
+        0.0
+      ],
+      "yaw": -3.1406,
+      "size": [
+        1.762,
+        1.004,
+        0.928
+      ],
+      "movable": true,
+      "rgba": [
+        0.541,
+        0.463,
+        0.314,
+        1.0
+      ]
+    },
+    {
+      "name": "table_27",
+      "label": "table",
+      "source": "scan",
+      "mesh": "meshes/table_27.glb",
+      "pos": [
+        2.311,
+        1.753,
+        0.0
+      ],
+      "yaw": -3.0308,
+      "size": [
+        0.568,
+        0.181,
+        0.519
+      ],
+      "movable": true,
+      "rgba": [
+        0.82,
+        0.671,
+        0.459,
+        1.0
+      ]
+    }
+  ]
+}
