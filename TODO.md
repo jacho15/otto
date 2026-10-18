@@ -9,7 +9,7 @@ Website work only. The video-to-room pipeline is being built on a separate branc
 - [x] Demo room with 5 IKEA pieces
 
 ## 1. Shop
-- [x] `catalog.json` with the 5 IKEA items (title, URL, price, size W×D×H, model file, photo)
+- [x] `catalog.json` with 5 IKEA products (title, URL, price, size W×D×H, photo)
 - [x] Catalog panel in the room view: product cards with photo, price, size and shop link
 - [x] "Add to room": place the product at its real size in the nearest free spot, then select it
 - [x] "Replace": pick a piece in the room and swap in a product. The old piece shows as a faint ghost, and the new one takes its spot (nudged inside the walls if needed). Removing the new piece brings the old one back.
@@ -35,6 +35,14 @@ Website work only. The video-to-room pipeline is being built on a separate branc
 - [ ] Fit-check each one without changing the room, and show price and savings
 - [ ] One click to swap an alternative in (uses Replace)
 
+## 4b. "Goes well with" suggestions (GenAI)
+Like "Frequently bought together", but for your room, and you see it live.
+- [ ] "Suggest furniture" button: calls Claude with the room (size, pieces, style, gaps, budget) and gets back a few products that would fit and match
+- [ ] Each suggestion gets a 3D model made automatically: the shop's own model if it has one, else one generated from the product photo, else a sized stand-in shape
+- [ ] Preview each suggestion live in the room at a free spot, as a ghost you can accept (Add to room), skip, or swap
+- [ ] Show why each one was picked, its price, and whether it fits the spend mandate
+- [ ] Suggestions come from real product pages (catalog or scraped), never invented prices
+
 ## 5. AI assistant (Claude)
 - [ ] Chat panel in the room view
 - [ ] Tools: read a product link, place, move, remove, check fit, find alternatives
@@ -43,16 +51,18 @@ Website work only. The video-to-room pipeline is being built on a separate branc
 - [ ] Treat page text as data: never follow instructions found on product pages
 
 ## 6. Agentic checkout (Visa track)
-- [ ] Spend mandate set only by the user: per-item price cap, allowed shops (matched by URL host), expiry date
-- [ ] Order panel: cart from the room's products, totals per currency
-- [ ] Approval step: the agent proposes an order, and only the user's click approves it
-- [ ] The agent has no tool that can change the mandate or approve an order
-- [ ] Mock payment that never claims a real purchase. Structure it so a Visa API can be swapped in.
-- [ ] Refuse prices that don't come from a real product page when a cap is set
-- [ ] "Why" line on each recommendation, and a "Your data" panel (what is kept, how to delete it)
+- [x] Spend mandate set only by the user: per-item cap, order total cap, allowed shops (matched by URL host), expiry date; saving it issues a mock agent token
+- [x] Claude checkout agent proposes an order from the room's products; the server fills in prices, never the model
+- [x] Approval step: only the user's click approves, and the server re-checks the mandate, prices and items first
+- [x] The agent has no tool that can change the mandate or approve an order
+- [x] Mock payment that never claims a real purchase, behind a provider interface so a Visa API can be swapped in
+- [x] "Why" line on each proposed item
+- [ ] Totals per currency (caps assume one currency today)
+- [ ] "Your data" panel (what is kept, how to delete it)
 
 ## 7. Rooms and pipeline hookup
 - [ ] Upload a room video from the home page and show build progress (job polling)
+- [ ] Room dimensions with the upload: the user types the measured width, depth and ceiling height (m or ft/in). Send them to the pipeline so it can lock the metric scale and fit the walls to a known rectangle instead of estimating them, which cuts GPU work. Use them as the walls if the scan's own fit disagrees by a lot, and show both.
 - [ ] Hook up the pipeline branch's output once it is ready
 - [ ] "Test room": an empty room of any size (1.5–15 m wide/deep, 2–4 m high), no upload needed
 - [ ] Optional toggle to show the scan's point cloud

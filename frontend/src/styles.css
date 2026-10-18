@@ -225,6 +225,15 @@ a {
   padding: 1px 8px;
 }
 
+.badge-ok {
+  font-size: 12px;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+
 .total {
   display: flex;
   justify-content: space-between;
@@ -392,4 +401,155 @@ a {
   font-size: 12px;
   white-space: nowrap;
   color: var(--muted);
+}
+
+/* Checkout */
+
+.checkout {
+  display: grid;
+  gap: 12px;
+}
+
+.checkout-card {
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.checkout-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.checkout-form {
+  display: grid;
+  gap: 10px;
+}
+
+.checkout-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.checkout-form input,
+.checkout-text {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+.checkout-text {
+  width: 100%;
+  resize: vertical;
+}
+
+.checkout-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.checkout-actions .btn {
+  flex: 1;
+}
+
+.checkout-summary,
+.order-items,
+.order-history,
+.violations {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.order-items {
+  gap: 10px;
+}
+
+.order-reason {
+  font-size: 13px;
+}
+
+.checkout-total {
+  padding-top: 10px;
+  font-size: 16px;
+}
+
+.violations {
+  color: var(--warn);
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.agent-quote {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+
+.receipt {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.receipt dt {
+  color: var(--muted);
+}
+
+.receipt dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.order-history li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.order-status {
+  font-size: 13px;
+  text-transform: capitalize;
+}
+
+.order-status.approved {
+  color: var(--accent);
+}
+
+.order-status.cancelled {
+  color: var(--muted);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(31, 29, 26, 0.4);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 10;
+}
+
+.modal {
+  max-width: 340px;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
 }

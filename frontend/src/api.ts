@@ -1,4 +1,24 @@
-import type { AddResult, CatalogItem, Room, RoomSummary, Vec2 } from './types'
+import type {
+  AddResult,
+  CatalogItem,
+  Mandate,
+  MandateInput,
+  Order,
+  Room,
+  RoomSummary,
+  Vec2,
+} from './types'
+
+/** A failed response. `detail` is the server's `detail` field (a string or {violations}), if it sent one. */
+export class ApiError extends Error {
+  status: number
+  detail: unknown
+  constructor(status: number, detail: unknown) {
+    super(`Server error ${status}.`)
+    this.status = status
+    this.detail = detail
+  }
+}
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response
@@ -7,9 +27,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new Error('Cannot reach the Otto server.')
   }
-  // The dev proxy answers 502-504 when the backend is down.
-  if (res.status >= 502 && res.status <= 504) throw new Error('Cannot reach the Otto server.')
-  if (!res.ok) throw new Error(`Server error ${res.status}.`)
+  if (!res.ok) {
+    const detail = await res.json().then((b: { detail?: unknown }) => b?.detail, () => undefined)
+    // The dev proxy answers 502-504 when the backend is down. A string detail means the server itself answered.
+    if (res.status >= 502 && res.status <= 504 && typeof detail !== 'string') throw new Error('Cannot reach the Otto server.')
+    throw new ApiError(res.status, detail)
+  }
   return res.json() as Promise<T>
 }
 
@@ -38,6 +61,33 @@ export const addObject = (id: string, catalogId: string, replace?: string) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ catalog_id: catalogId, replace: replace ?? null }),
   })
+
+const json = (body: unknown): RequestInit => ({
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+})
+
+export const getMandate = () => request<Mandate | null>('/api/mandate')
+
+export const putMandate = (m: MandateInput) => request<Mandate>('/api/mandate', { method: 'PUT', ...json(m) })
+
+export const deleteMandate = () => request<null>('/api/mandate', { method: 'DELETE' })
+
+const orderUrl = (id: string) => `/api/rooms/${encodeURIComponent(id)}/orders`
+
+export const listOrders = (id: string) => request<Order[]>(orderUrl(id))
+
+export const agentCheckout = (id: string, instruction: string) =>
+  request<{ message: string; order: Order | null }>(`/api/rooms/${encodeURIComponent(id)}/agent/checkout`, {
+    method: 'POST',
+    ...json({ instruction }),
+  })
+
+export const approveOrder = (id: string, oid: string) =>
+  request<Order>(`${orderUrl(id)}/${encodeURIComponent(oid)}/approve`, { method: 'POST' })
+
+export const cancelOrder = (id: string, oid: string) =>
+  request<Order>(`${orderUrl(id)}/${encodeURIComponent(oid)}/cancel`, { method: 'POST' })
 
 export const catalogFileUrl = (path: string) => `/api/catalog/files/${path.split('/').map(encodeURIComponent).join('/')}`
 

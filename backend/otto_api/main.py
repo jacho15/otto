@@ -1,19 +1,27 @@
 import json
 import os
 import re
+import secrets
 import shutil
 import tempfile
 import threading
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Annotated
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
+from .agent import AgentError, make_client, run_checkout
+from .checkout import MockVisaProvider, approval_violations
 from .fit import find_warnings
 from .place import add_item
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+load_dotenv(REPO_ROOT / ".env")
 
 app = FastAPI(title="Otto API")
 
@@ -25,10 +33,12 @@ def validation_error(request, exc):
     return JSONResponse({"detail": errors}, status_code=422)
 
 ROOM_ID = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-DEFAULT_DATA = Path(__file__).resolve().parent.parent.parent / "data"
+DEFAULT_DATA = REPO_ROOT / "data"
 lock = threading.Lock()
 
 Number = Annotated[float, Field(allow_inf_nan=False)]
+Money = Annotated[float, Field(allow_inf_nan=False, ge=0)]
+Shop = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 
 
 class ObjectPatch(BaseModel):
@@ -39,6 +49,24 @@ class ObjectPatch(BaseModel):
 class ObjectAdd(BaseModel):
     catalog_id: str
     replace: str | None = None
+
+
+class MandateBody(BaseModel):
+    max_item_price: Money | None
+    max_total: Money | None
+    shops: Annotated[list[Shop], Field(max_length=10)]
+    expires: Annotated[str, Field(pattern=r"^\d{4}-\d{2}-\d{2}$")] | None
+
+    @field_validator("expires")
+    @classmethod
+    def real_date(cls, value):
+        if value is not None:
+            date.fromisoformat(value)
+        return value
+
+
+class CheckoutBody(BaseModel):
+    instruction: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
 
 
 def data_dir() -> Path:
@@ -112,6 +140,62 @@ def find_object(scene: dict, name: str) -> dict:
     raise HTTPException(404, "Object not found")
 
 
+def write_json(path: Path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+
+
+def load_mandate() -> dict | None:
+    path = data_dir() / "mandate.json"
+    if not path.is_file():
+        return None
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_orders(room_id: str) -> list:
+    base = room_dir(room_id) / "orders"
+    orders = []
+    if base.is_dir():
+        for path in base.glob("*.json"):
+            with open(path, encoding="utf-8") as f:
+                orders.append(json.load(f))
+    return sorted(orders, key=lambda o: o["created_at"], reverse=True)
+
+
+def load_order(room_id: str, order_id: str) -> dict:
+    path = room_dir(room_id) / "orders" / f"{order_id}.json"
+    if not ROOM_ID.match(order_id) or not path.is_file():
+        raise HTTPException(404, "Order not found")
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_order(room_id: str, order: dict) -> None:
+    write_json(room_dir(room_id) / "orders" / f"{order['id']}.json", order)
+
+
+def copy_mesh(room_id: str, item: dict) -> None:
+    """Copy the catalog model file into the room's meshes. Raises FileNotFoundError."""
+    source = catalog_dir() / item["model"]
+    if not source.is_file():
+        raise FileNotFoundError(item["model"])
+    mesh = room_dir(room_id) / "meshes" / f"{item['id']}.glb"
+    if not mesh.exists():
+        mesh.parent.mkdir(exist_ok=True)
+        tmp = mesh.with_suffix(".tmp")
+        shutil.copyfile(source, tmp)
+        os.replace(tmp, mesh)
+
+
 @app.get("/api/rooms")
 def list_rooms():
     result = []
@@ -166,15 +250,10 @@ def add_object(room_id: str, body: ObjectAdd):
                 raise HTTPException(409, "Object is hidden")
             if not target.get("movable", True):
                 raise HTTPException(409, "Object is not movable")
-        source = catalog_dir() / item["model"]
-        if not source.is_file():
+        try:
+            copy_mesh(room_id, item)
+        except FileNotFoundError:
             raise HTTPException(404, "Model file not found")
-        mesh = room_dir(room_id) / "meshes" / f"{item['id']}.glb"
-        if not mesh.exists():
-            mesh.parent.mkdir(exist_ok=True)
-            tmp = mesh.with_suffix(".tmp")
-            shutil.copyfile(source, tmp)
-            os.replace(tmp, mesh)
         scene["objects"], name = add_item(scene["room"], scene["objects"], item, body.replace)
         save_scene(room_id, scene)
         return {**room_response(room_id, scene), "added": name}
@@ -192,6 +271,101 @@ def delete_object(room_id: str, name: str):
                     other.pop("hidden", None)
         save_scene(room_id, scene)
         return room_response(room_id, scene)
+
+
+@app.get("/api/mandate")
+def get_mandate():
+    with lock:
+        return load_mandate()
+
+
+@app.put("/api/mandate")
+def put_mandate(body: MandateBody):
+    # A new mock agent token each time the mandate is saved.
+    mandate = {
+        **body.model_dump(),
+        "token_last4": f"{secrets.randbelow(10000):04d}",
+        "token_id": "tok_" + secrets.token_hex(8),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    with lock:
+        write_json(data_dir() / "mandate.json", mandate)
+    return mandate
+
+
+@app.delete("/api/mandate")
+def delete_mandate():
+    with lock:
+        (data_dir() / "mandate.json").unlink(missing_ok=True)
+    return None
+
+
+@app.get("/api/rooms/{room_id}/orders")
+def list_orders(room_id: str):
+    with lock:
+        return load_orders(room_id)
+
+
+@app.post("/api/rooms/{room_id}/orders/{order_id}/approve")
+def approve_order(room_id: str, order_id: str):
+    with lock:
+        order = load_order(room_id, order_id)
+        mandate = load_mandate()
+        problems = approval_violations(
+            order, load_scene(room_id)["objects"], load_orders(room_id), mandate, date.today()
+        )
+        if problems:
+            raise HTTPException(409, {"violations": problems})
+        order = {**order, "status": "approved", "payment": MockVisaProvider().authorize(order, mandate)}
+        save_order(room_id, order)
+        return order
+
+
+@app.post("/api/rooms/{room_id}/orders/{order_id}/cancel")
+def cancel_order(room_id: str, order_id: str):
+    with lock:
+        order = load_order(room_id, order_id)
+        if order["status"] != "proposed":
+            raise HTTPException(409, "Only a proposed order can be cancelled")
+        order = {**order, "status": "cancelled"}
+        save_order(room_id, order)
+        return order
+
+
+def checkout_state(room_id: str) -> dict:
+    with lock:
+        return {
+            "scene": load_scene(room_id),
+            "orders": load_orders(room_id),
+            "mandate": load_mandate(),
+            "catalog": load_catalog(),
+        }
+
+
+def save_order_locked(room_id: str, order: dict) -> None:
+    with lock:
+        save_order(room_id, order)
+
+
+@app.post("/api/rooms/{room_id}/agent/checkout")
+def agent_checkout(room_id: str, body: CheckoutBody):
+    room_dir(room_id)
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(503, "Add ANTHROPIC_API_KEY to .env")
+    with lock:
+        if load_mandate() is None:
+            raise HTTPException(409, "Set a spend mandate first")
+    try:
+        return run_checkout(
+            make_client(api_key),
+            room_id,
+            body.instruction,
+            lambda: checkout_state(room_id),
+            lambda order: save_order_locked(room_id, order),
+        )
+    except AgentError as e:
+        raise HTTPException(502, str(e))
 
 
 def serve_file(base: Path, path: str):

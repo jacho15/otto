@@ -72,6 +72,12 @@ def data_dir(tmp_path, monkeypatch):
     return tmp_path / "data"
 
 
+@pytest.fixture(autouse=True)
+def no_api_key(monkeypatch):
+    """Tests never see a real key, even if the repo .env has one."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+
 @pytest.fixture
 def client(data_dir):
     return TestClient(app)

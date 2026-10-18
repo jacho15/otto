@@ -66,3 +66,49 @@ export interface RoomSummary {
   size_xy: Vec2
   object_count: number
 }
+
+export interface MandateInput {
+  max_item_price: number | null
+  max_total: number | null
+  shops: string[]
+  expires: string | null // YYYY-MM-DD
+}
+
+export interface Mandate extends MandateInput {
+  token_last4: string
+  token_id: string
+  created_at: string
+}
+
+export interface OrderItem {
+  object_name: string
+  title: string
+  url: string
+  price: number
+  currency: string
+  reason: string
+}
+
+export interface Payment {
+  provider: 'mock-visa'
+  auth_id: string
+  token_last4: string
+  amount: number
+  currency: string
+  demo: true
+  note: string
+}
+
+export interface Order {
+  id: string
+  room_id: string
+  status: 'proposed' | 'approved' | 'cancelled'
+  items: OrderItem[]
+  total: number
+  currency: string
+  violations: string[]
+  created_at: string
+  created_by: 'agent'
+  agent_message: string
+  payment: Payment | null
+}

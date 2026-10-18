@@ -6,3 +6,8 @@ dist/
 __pycache__/
 .pytest_cache/
 .env
+data/mandate.json
+data/saved.json
+data/rooms/*/orders/
+data/rooms/*
+!data/rooms/demo-living-room/

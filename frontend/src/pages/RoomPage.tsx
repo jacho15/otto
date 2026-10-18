@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { addObject, formatPrice, getRoom } from '../api'
+import { addObject, formatPrice, getRoom, listOrders } from '../api'
+import { orderedNames } from '../checkoutLogic'
 import { findWarnings, warnedNames } from '../geometry'
 import RoomScene from '../scene/RoomScene'
 import { mergeServerObjects } from '../saveLogic'
-import type { Room, RoomObject, Vec2 } from '../types'
+import type { Order, Room, RoomObject, Vec2 } from '../types'
 import { useSaveQueue } from '../useSaveQueue'
+import Checkout from './Checkout'
 import { ErrorCard, itemCount } from './Home'
 import Shop from './Shop'
 
@@ -19,8 +21,9 @@ export default function RoomPage() {
   const [dragging, setDragging] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [tab, setTab] = useState<'room' | 'shop'>('room')
+  const [tab, setTab] = useState<'room' | 'shop' | 'checkout'>('room')
   const [adding, setAdding] = useState(false)
+  const [orders, setOrders] = useState<Order[]>([])
   const draggingRef = useRef<string | null>(null)
   const resyncAfterDrag = useRef(false)
   const addingRef = useRef(false)
@@ -37,6 +40,10 @@ export default function RoomPage() {
       },
       (e: Error) => setError(e.message),
     )
+  }, [id])
+
+  useEffect(() => {
+    listOrders(id).then(setOrders, () => {})
   }, [id])
 
   const onResult = useCallback((r: Room, pending: Set<string>) => {
@@ -124,9 +131,13 @@ export default function RoomPage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      const t = e.target
+      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return
+      if (t instanceof HTMLButtonElement || (t instanceof HTMLElement && t.isContentEditable)) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
+      if (document.querySelector('[role="dialog"]')) return
       if (e.key === 'Escape') return setSelected(null)
+      if (tab === 'checkout') return
       const obj = objectsRef.current.find((o) => o.name === selected)
       if (!obj || !obj.movable || obj.hidden || obj.name === replacingRef.current) return
       const key = e.key.toLowerCase()
@@ -144,7 +155,7 @@ export default function RoomPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selected, save, updateObject])
+  }, [selected, tab, save, updateObject])
 
   const sizeXY = room?.room.size_xy
   const warned = useMemo(() => (sizeXY ? warnedNames(findWarnings(objects, sizeXY)) : new Set<string>()), [objects, sizeXY])
@@ -152,6 +163,7 @@ export default function RoomPage() {
   const selectedObj = visible.find((o) => o.name === selected)
   const replaceTarget =
     selectedObj?.movable ? { name: selectedObj.name, title: selectedObj.product?.title ?? selectedObj.label } : null
+  const ordered = useMemo(() => orderedNames(orders), [orders])
   const totalAmount = visible.reduce((sum, o) => sum + (o.product?.price ?? 0), 0)
 
   if (error) {
@@ -195,11 +207,15 @@ export default function RoomPage() {
         <div className="tabs">
           <button className={tab === 'room' ? 'on' : ''} onClick={() => setTab('room')}>Room</button>
           <button className={tab === 'shop' ? 'on' : ''} onClick={() => setTab('shop')}>Shop</button>
+          <button className={tab === 'checkout' ? 'on' : ''} onClick={() => setTab('checkout')}>Checkout</button>
         </div>
         {saveError && <div className="save-error">{saveError}</div>}
+        <div hidden={tab !== 'checkout'}>
+          <Checkout roomId={id} orders={orders} setOrders={setOrders} />
+        </div>
         {tab === 'shop' ? (
           <Shop target={replaceTarget} busy={adding} onAdd={addPiece} />
-        ) : (
+        ) : tab === 'checkout' ? null : (
           <>
           <ul className="item-list">
             {visible.map((o) => (
@@ -216,6 +232,7 @@ export default function RoomPage() {
                   </span>
                   <span className="item-meta">
                     {warned.has(o.name) && <span className="badge-warn">Check fit</span>}
+                    {ordered.has(o.name) && <span className="badge-ok">Ordered (demo)</span>}
                     {o.product && (
                       <span className="item-price">{o.product.price == null ? '—' : formatPrice(o.product.price, o.product.currency)}</span>
                     )}
