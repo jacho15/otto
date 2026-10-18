@@ -1,6 +1,7 @@
 // Photon 2.0 (beta) iMessage: poll for received messages, reply with text and pictures.
 // Follows Photon's "Build an iMessage agent" guide: listMessages to receive, sendMessage to reply,
 // with the agent's own line (receivedBy.id) as the sender. Pictures go up as attachments first.
+// Unlike the guide, replies aren't threaded (no parentMessageId): shared lines don't support that.
 import { setTimeout as sleep } from 'node:timers/promises'
 import { ApiError, Photon } from '@photon-ai/api'
 import type { Incoming } from './conversation'
@@ -47,11 +48,12 @@ export async function incomingOf(
   return text ? { kind: 'text', text: text.text! } : null
 }
 
-export async function runPhotonV2(cfg: { key: string; project: string }, handle: Handler): Promise<never> {
+export async function runPhotonV2(cfg: { key: string; project: string; lookbackSeconds?: number }, handle: Handler): Promise<never> {
   const photon = new Photon({ headers: { Authorization: `Bearer ${cfg.key}` } })
   const project = cfg.project
   const seen = new Set<string>()
-  let createdSince = new Date(Date.now() - 5_000).toISOString()
+  // Look back a little at start, so a message sent while otto was restarting still gets an answer.
+  let createdSince = new Date(Date.now() - (cfg.lookbackSeconds ?? 5) * 1000).toISOString()
 
   const download = async (attachmentId: string) => {
     const blob = await photon.projects.downloadAttachment({ path: { id: project, attachmentId } })
@@ -86,7 +88,8 @@ export async function runPhotonV2(cfg: { key: string; project: string }, handle:
               .sendMessage({
                 path: { id: project },
                 headers: { 'idempotency-key': `otto:${m.id}:${n++}` },
-                body: { spaceId, senderId, parentMessageId: m.id, content },
+                // plain messages, not threaded replies: shared iMessage lines refuse replies (409 SPACE_NOT_SENDABLE)
+                body: { spaceId, senderId, content },
               })
               .then(() => undefined)
           const outbox: Outbox = {
@@ -106,12 +109,13 @@ export async function runPhotonV2(cfg: { key: string; project: string }, handle:
                 () => undefined, // typing dots are a nicety; never fail a reply over them
               ),
           }
+          console.log(`[imessage] ${m.sentBy.handle}: ${msg.kind === 'text' ? msg.text : `[photo ${msg.mimeType}]`}`)
           handle(`imessage:${spaceId}`, outbox, msg)
         }
         pageToken = page.nextPageToken ?? undefined
       } while (pageToken)
     } catch (e) {
-      if (e instanceof ApiError) console.error(`Photon API error ${e.status} (request ${e.requestId ?? 'unknown'})`)
+      if (e instanceof ApiError) console.error(`Photon API error ${e.status} (request ${e.requestId ?? 'unknown'})`, e.message)
       else console.error(e instanceof Error ? e.message : e)
     }
     await sleep(POLL_MS)

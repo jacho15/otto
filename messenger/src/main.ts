@@ -20,6 +20,9 @@ const PUBLIC_URL = env('OTTO_PUBLIC_URL') ?? 'http://localhost:5173'
 const ROOM = env('OTTO_ROOM') ?? 'demo-living-room'
 const projectId = env('PHOTON_PROJECT_ID', 'Photon_Project_ID')
 const projectKey = env('PHOTON_API_KEY', 'Photon_FULL_API_KEY', 'Photon_Demo_API_KEY')
+// OTTO_TERMINAL=off skips the terminal chat window, so iMessage logs print plainly.
+const withTerminal = env('OTTO_TERMINAL') !== 'off'
+const lookbackSeconds = Number(env('OTTO_LOOKBACK_SECONDS') ?? 5)
 
 const otto = ottoApi(OTTO_API)
 const states = new Map<string, State>()
@@ -48,19 +51,19 @@ async function handle(key: string, outbox: Outbox, msg: Incoming) {
 function enqueue(key: string, outbox: Outbox, msg: Incoming) {
   const next = (queues.get(key) ?? Promise.resolve())
     .then(() => handle(key, outbox, msg))
-    .catch((e) => console.error(`[${key}]`, e))
+    .catch((e) => console.error(`[${key}] reply failed:`, e instanceof Error ? e.message : e, (e as { body?: unknown })?.body ?? ''))
   queues.set(key, next)
 }
 
 if (projectId && projectKey) {
-  void runPhotonV2({ key: projectKey, project: projectId }, enqueue)
+  void runPhotonV2({ key: projectKey, project: projectId, lookbackSeconds }, enqueue)
 } else {
   console.log('No Photon keys in .env, so iMessage is off. The terminal chat still works.')
 }
 
-const app = await Spectrum({ providers: [terminal.config()] })
-console.log('otto is listening on the terminal')
-for await (const [space, message] of app.messages) {
+const app = withTerminal ? await Spectrum({ providers: [terminal.config()] }) : null
+if (app) console.log('otto is listening on the terminal')
+if (app) for await (const [space, message] of app.messages) {
   if (message.direction !== 'inbound') continue
   const content = message.content
   let msg: Incoming | null = null

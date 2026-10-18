@@ -31,6 +31,9 @@ number assigned to it.
 
 Optional settings, also in `.env`:
 
+- `OTTO_TERMINAL=off`: skip the terminal chat window, so iMessage activity and errors print plainly
+- `OTTO_LOOKBACK_SECONDS`: on start, also answer messages from this many seconds ago (default 5)
+
 - `OTTO_ROOM`: the room new chats start in (default `demo-living-room`)
 - `OTTO_API_URL`: otto's backend (default `http://localhost:8000`)
 - `OTTO_PUBLIC_URL`: where the "Open it in 3D" links point. Use a public address for phones (default `http://localhost:5173`).
