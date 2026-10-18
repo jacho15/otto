@@ -286,3 +286,20 @@ export interface DataSummary {
   items: DataItem[]
   note: string
 }
+
+/** How a scanned room was made: the numbers and pictures behind its "How this room was made" page. */
+export interface ScanStory {
+  video: { seconds: number; frames: number; fps: number }
+  stage_frames: { frame: number; time: number; objects: number; labels: string[] }[]
+  candidates: number
+  fitted: number
+  kept: number
+  pieces: { name: string; label: string; frame: number; size: Vec3; fit: string; rmse_cm: number; color: string }[]
+  tracked_frames: number
+  points: number
+  pipeline: {
+    gpu: string
+    minutes: { depth: number; tracking: number; models: number }
+    sizes_mb: { phone_video: number; uploaded: number; results: number; room: number }
+  }
+}

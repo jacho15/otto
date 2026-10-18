@@ -17,6 +17,7 @@ import type {
   Room,
   RoomSummary,
   SavedItem,
+  ScanStory,
   SuggestResult,
   UploadResult,
   Vec2,
@@ -196,6 +197,15 @@ export const meshUrl = (id: string, mesh: string) =>
     : mesh.startsWith('catalog/')
       ? catalogFileUrl(mesh.slice('catalog/'.length))
       : `/files/${encodeURIComponent(id)}/${mesh.split('/').map(encodeURIComponent).join('/')}`
+
+/** A file from a room's demo folder (the "How this room was made" page). */
+export const demoFileUrl = (id: string, name: string) => `/files/${encodeURIComponent(id)}/demo/${encodeURIComponent(name)}`
+
+/** The room's scan story, or null when the room has none (blueprints, older scans). */
+export async function getStory(id: string): Promise<ScanStory | null> {
+  const res = await fetch(demoFileUrl(id, 'story.json'))
+  return res.ok ? ((await res.json()) as ScanStory) : null
+}
 
 /** What Otto stores about you, by kind. */
 export const getData = () => request<DataSummary>('/api/data')

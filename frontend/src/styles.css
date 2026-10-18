@@ -1075,3 +1075,270 @@ a {
   padding: 4px 12px;
   flex-shrink: 0;
 }
+
+/* ---- "How this room was made" ---- */
+.story-link {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 14px;
+}
+
+.story-main {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.story-kicker {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.story-hero h1 {
+  margin: 0 0 8px;
+  font-size: clamp(24px, 4vw, 34px);
+  line-height: 1.2;
+}
+
+.story-hero > .muted {
+  max-width: 720px;
+}
+
+.story-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  margin-top: 20px;
+}
+
+.story-video {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  border-radius: var(--radius);
+  background: #000;
+}
+
+.story-stats {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.story-stat {
+  display: grid;
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.story-stat strong {
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.story-stats .btn {
+  justify-self: start;
+}
+
+.story-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.story-section {
+  margin-top: 48px;
+}
+
+.story-section h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.story-section > p {
+  max-width: 760px;
+  line-height: 1.55;
+}
+
+.story-route {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  counter-reset: hop;
+}
+
+.story-route-step {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 14px;
+  font-size: 14px;
+}
+
+/* an arrow between hops */
+.story-route-step:not(:last-child)::after {
+  content: '→';
+  position: absolute;
+  right: -11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--accent);
+  font-weight: 700;
+  z-index: 1;
+}
+
+.story-frames {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.story-frames.story-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.story-frames figure,
+.story-wide {
+  margin: 0;
+}
+
+.story-frames img,
+.story-wide img {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.story-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+figcaption {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.story-wide {
+  margin-top: 16px;
+}
+
+.story-pieces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.story-piece {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  width: 96px;
+  padding: 6px;
+  font: inherit;
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.story-piece img {
+  width: 82px;
+  height: 82px;
+  object-fit: contain;
+}
+
+.story-piece.on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.story-piece-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr) minmax(0, 220px);
+  gap: 16px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.story-piece-detail > img {
+  width: 100%;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+}
+
+.model-spin {
+  height: 300px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.model-spin canvas {
+  cursor: grab;
+}
+
+.story-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.story-facts dt {
+  color: var(--muted);
+}
+
+.story-facts dd {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .story-hero-grid,
+  .story-piece-detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .story-video {
+    max-height: 70vh;
+    width: auto;
+    max-width: 100%;
+  }
+
+  .story-route,
+  .story-frames.story-two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .story-frames {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .story-route-step:not(:last-child)::after {
+    content: '↓';
+    right: auto;
+    left: 50%;
+    top: auto;
+    bottom: -14px;
+    transform: translateX(-50%);
+  }
+}

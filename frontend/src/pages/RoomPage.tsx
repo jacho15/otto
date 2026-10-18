@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { addObject, formatPrice, getRoom, listCustomItems, listOrders, restoreLayout, saveLayout, sendChat, undoRoom } from '../api'
+import { addObject, formatPrice, getRoom, getStory, listCustomItems, listOrders, restoreLayout, saveLayout, sendChat, undoRoom } from '../api'
 import { errorText, orderedNames } from '../checkoutLogic'
 import { dropIntent, type DropIntent } from '../furnitureLogic'
 import { findWarnings, warnedNames } from '../geometry'
@@ -59,6 +59,12 @@ export default function RoomPage() {
   idRef.current = id
   const objectsRef = useRef(objects)
   objectsRef.current = objects
+
+  // Scanned rooms can carry a "How this room was made" page.
+  const [hasStory, setHasStory] = useState(false)
+  useEffect(() => {
+    getStory(id).then((s) => setHasStory(s !== null), () => setHasStory(false))
+  }, [id])
 
   useEffect(() => {
     getRoom(id).then(
@@ -438,6 +444,11 @@ export default function RoomPage() {
             setServerVersion((v) => v + 1)
           }} />
           <DoorSize room={room} onSaved={setRoom} />
+          {hasStory && (
+            <Link className="text-link story-link" to={`/rooms/${encodeURIComponent(id)}/how-it-was-made`}>
+              How this room was made from a phone video
+            </Link>
+          )}
         </div>
         <div className="tabs">
           <button className={tab === 'room' ? 'on' : ''} onClick={() => setTab('room')}>Room</button>

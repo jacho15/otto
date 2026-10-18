@@ -7,6 +7,7 @@ import './styles.css'
 const Home = lazy(() => import('./pages/Home'))
 const Liked = lazy(() => import('./pages/Liked'))
 const RoomPage = lazy(() => import('./pages/RoomPage'))
+const ScanStory = lazy(() => import('./pages/ScanStory'))
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -16,6 +17,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/" element={<Home />} />
           <Route path="/liked" element={<Liked />} />
           <Route path="/rooms/:id" element={<RoomPage />} />
+          <Route path="/rooms/:id/how-it-was-made" element={<ScanStory />} />
         </Routes>
       </Suspense>
     </BrowserRouter>
